@@ -1,0 +1,3 @@
+- Add check all box to select all or unselect all 
+- one for all categories and one for each subcategories 
+- 

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grade Normalizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-content">
+            <div class="navbar-brand">
+                Grade Normalizer
+            </div>
+            <div class="theme-toggle" id="themeToggle">
+                <div class="theme-toggle-slider">
+                    <img src="./assets/lightmode.png" alt="Light mode" id="themeIcon">
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="header">
+            <h1>Student Grade Normalization</h1>
+            <p>Enter your CRN to access the grade normalization tool</p>
+        </div>
+
+        <div class="card">
+            <div id="crnSection">
+                <div class="form-group">
+                    <label class="form-label" for="crnInput">Course Reference Number (CRN)</label>
+                    <input 
+                        type="text" 
+                        id="crnInput" 
+                        class="form-input" 
+                        placeholder="Enter 5-6 digit CRN"
+                        maxlength="6"
+                        pattern="[0-9]*"
+                    >
+                </div>
+                <button class="btn btn-primary" id="submitCrn" type="button">
+                    Verify CRN
+                </button>
+                <div id="crnMessage"></div>
+            </div>
+
+            <div class="upload-section" id="uploadSection">
+                <div id="categoryConfig">
+                    <div class="form-group">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <label class="form-label">Configure Categories (Optional)</label>
+                            <button class="btn-link" id="toggleCategories" type="button">
+                                <span id="toggleText">Show</span> ▼
+                            </button>
+                        </div>
+                        <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.5rem;">
+                            Customize how your CSV columns are categorized
+                        </p>
+                        <p class="hint">Keywords are case-insensitive and matched anywhere in column names</p>
+                    </div>
+                    
+                    <div id="categoryEditor" style="display:none;">
+                        <div id="categoryList"></div>
+                        <button class="btn-secondary" id="addCategory" style="margin-top:1rem;" type="button">
+                            + Add Custom Category
+                        </button>
+                        <button class="btn btn-primary" id="saveCategories" style="margin-top:1rem;" type="button">
+                            Save Categories
+                        </button>
+                        <div id="categoryMessage"></div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Upload Student Grades (CSV)</label>
+                    <div class="file-upload-wrapper">
+                        <input 
+                            type="file" 
+                            id="csvFile" 
+                            class="file-upload-input"
+                            accept=".csv"
+                        >
+                        <label for="csvFile" class="file-upload-label" id="fileLabel">
+                            <span id="fileName">Choose CSV file or drag here</span>
+                        </label>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" id="processFile" disabled type="button">
+                    Process & Normalize Grades
+                </button>
+                <div id="uploadMessage"></div>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="script.js"></script>
+</body>
+</html>

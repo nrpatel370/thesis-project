@@ -1,0 +1,319 @@
+import io
+import json
+
+import pandas as pd
+from flask import Flask, jsonify, request
+
+from categories import categorise_columns, get_default_categories
+from constants import DEFAULT_USER_ID
+from db import get_db, get_latest_uploaded_csv, init_db
+from normalization import (
+    build_normalized_dataframe,
+    build_normalized_with_debug,
+    count_gradesheet_data_rows,
+)
+from serializers import rows_to_json_safe_records
+
+app = Flask(__name__)
+
+
+def read_grades_csv(csv_text):
+    """Parse gradebook CSV; strip BOM so column names match across exports."""
+    text = csv_text.lstrip("\ufeff") if isinstance(csv_text, str) else csv_text
+    return pd.read_csv(io.StringIO(text))
+
+
+def json_error(message, status_code=400):
+    return jsonify({"error": message}), status_code
+
+
+def get_user_categories_from_db(user_id):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT categories FROM user_categories WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+    return json.loads(row["categories"]) if row else None
+
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
+
+@app.route("/upload", methods=["OPTIONS"])
+@app.route("/save-preferences", methods=["OPTIONS"])
+@app.route("/preferences/<user_id>", methods=["OPTIONS"])
+@app.route("/categories", methods=["OPTIONS"])
+@app.route("/categories/defaults", methods=["OPTIONS"])
+@app.route("/categories/<user_id>", methods=["OPTIONS"])
+@app.route("/normalize", methods=["OPTIONS"])
+@app.route("/normalize/debug", methods=["OPTIONS"])
+def handle_preflight(user_id=None):
+    return jsonify({"status": "ok"}), 200
+
+
+@app.route("/upload", methods=["POST"])
+def upload_csv():
+    if "file" not in request.files:
+        return json_error("No file provided")
+
+    file = request.files["file"]
+    user_id = request.form.get("user_id", DEFAULT_USER_ID)
+    if not file.filename.endswith(".csv"):
+        return json_error("File must be a CSV")
+
+    try:
+        csv_content = file.read().decode("utf-8")
+        df = read_grades_csv(csv_content)
+        if df.empty:
+            return json_error("CSV file is empty")
+
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO uploaded_csvs (user_id, csv_data) VALUES (?, ?)",
+                (user_id, csv_content),
+            )
+            # Prune old uploads — keep only the latest row per user to avoid unbounded growth.
+            conn.execute(
+                """
+                DELETE FROM uploaded_csvs
+                WHERE user_id = ? AND id NOT IN (
+                    SELECT id FROM uploaded_csvs WHERE user_id = ? ORDER BY uploaded_at DESC LIMIT 1
+                )
+                """,
+                (user_id, user_id),
+            )
+            conn.commit()
+
+        columns = df.columns.tolist()
+        custom_categories = get_user_categories_from_db(user_id)
+        categories = categorise_columns(columns, custom_categories)
+        student_row_count = count_gradesheet_data_rows(df)
+        return jsonify(
+            {
+                "columns": columns,
+                "categories": categories,
+                "row_count": student_row_count,
+                "raw_csv_row_count": int(len(df)),
+            }
+        ), 200
+    except Exception as error:
+        return json_error(f"Failed to parse CSV: {error}", 500)
+
+
+@app.route("/normalize", methods=["POST"])
+def normalize_grades():
+    data = request.get_json()
+    if not data:
+        return json_error("No JSON body provided")
+
+    user_id = data.get("user_id", DEFAULT_USER_ID)
+    selected_fields = data.get("selected_fields", [])
+    selected_attendance_column = data.get("selected_attendance_column")
+    selected_final_exam_column = data.get("selected_final_exam_column")
+    if not selected_fields:
+        return json_error("No fields selected")
+
+    try:
+        csv_data = get_latest_uploaded_csv(user_id)
+        if not csv_data:
+            return json_error("No CSV data found. Please upload a CSV first.", 404)
+
+        input_df = read_grades_csv(csv_data)
+        result_df = build_normalized_dataframe(
+            input_df,
+            selected_fields,
+            selected_attendance_override=selected_attendance_column,
+            selected_final_exam_override=selected_final_exam_column,
+        )
+        return jsonify(
+            {
+                "message": "Grades normalized successfully",
+                "columns": result_df.columns.tolist(),
+                "data": rows_to_json_safe_records(result_df),
+                "row_count": len(result_df),
+            }
+        ), 200
+    except Exception as error:
+        return json_error(f"Normalization failed: {error}", 500)
+
+
+@app.route("/normalize/debug", methods=["POST"])
+def normalize_grades_debug():
+    data = request.get_json()
+    if not data:
+        return json_error("No JSON body provided")
+
+    user_id = data.get("user_id", DEFAULT_USER_ID)
+    selected_fields = data.get("selected_fields", [])
+    selected_attendance_column = data.get("selected_attendance_column")
+    selected_final_exam_column = data.get("selected_final_exam_column")
+    if not selected_fields:
+        return json_error("No fields selected")
+
+    try:
+        csv_data = get_latest_uploaded_csv(user_id)
+        if not csv_data:
+            return json_error("No CSV data found. Please upload a CSV first.", 404)
+
+        input_df = read_grades_csv(csv_data)
+        result_df, debug_payload = build_normalized_with_debug(
+            input_df,
+            selected_fields,
+            selected_attendance_override=selected_attendance_column,
+            selected_final_exam_override=selected_final_exam_column,
+        )
+        return jsonify(
+            {
+                "message": "Grades normalized successfully (debug)",
+                "columns": result_df.columns.tolist(),
+                "data": rows_to_json_safe_records(result_df),
+                "row_count": len(result_df),
+                "debug": debug_payload,
+            }
+        ), 200
+    except Exception as error:
+        return json_error(f"Debug normalization failed: {error}", 500)
+
+
+@app.route("/categories/defaults", methods=["GET"])
+def get_defaults():
+    return jsonify(get_default_categories()), 200
+
+
+@app.route("/categories/<user_id>", methods=["GET"])
+def get_user_categories(user_id):
+    try:
+        categories = get_user_categories_from_db(user_id)
+        if categories:
+            return jsonify({"categories": categories, "is_custom": True}), 200
+        return jsonify({"categories": get_default_categories(), "is_custom": False}), 200
+    except Exception as error:
+        return json_error(f"Database error: {error}", 500)
+
+
+@app.route("/categories", methods=["POST"])
+def save_categories():
+    data = request.get_json()
+    if not data:
+        return json_error("No JSON body provided")
+
+    user_id = data.get("user_id", "default_user")
+    course_id = data.get("course_id")
+    categories = data.get("categories", {})
+    if not categories:
+        return json_error("No categories provided")
+
+    try:
+        with get_db() as conn:
+            existing = conn.execute(
+                "SELECT id FROM user_categories WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    """
+                    UPDATE user_categories
+                    SET categories = ?, course_id = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE user_id = ?
+                    """,
+                    (json.dumps(categories), course_id, user_id),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO user_categories (user_id, course_id, categories) VALUES (?, ?, ?)",
+                    (user_id, course_id, json.dumps(categories)),
+                )
+            conn.commit()
+        return jsonify({"message": "Categories saved successfully", "user_id": user_id}), 200
+    except Exception as error:
+        return json_error(f"Database error: {error}", 500)
+
+
+@app.route("/save-preferences", methods=["POST"])
+def save_preferences():
+    data = request.get_json()
+    if not data:
+        return json_error("No JSON body provided")
+
+    user_id = str(data.get("user_id", "default_user")).strip()
+    course_id = data.get("course_id")
+    preferences = data.get("preferences", [])
+    selected_attendance_column = data.get("selected_attendance_column")
+    selected_final_exam_column = data.get("selected_final_exam_column")
+    if not preferences:
+        return json_error("No preferences provided")
+
+    # Store structured preferences so UI selections can be restored on refresh.
+    if isinstance(preferences, list):
+        preferences_payload = {
+            "selected_columns": preferences,
+            "selected_attendance_column": selected_attendance_column,
+            "selected_final_exam_column": selected_final_exam_column,
+        }
+    elif isinstance(preferences, dict):
+        preferences_payload = preferences
+    else:
+        return json_error("Invalid preferences format")
+
+    try:
+        with get_db() as conn:
+            # Replace all rows for this CRN so duplicate legacy rows cannot mask updates.
+            conn.execute("DELETE FROM user_preferences WHERE user_id = ?", (user_id,))
+            conn.execute(
+                """
+                INSERT INTO user_preferences (user_id, course_id, preferences, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (user_id, course_id, json.dumps(preferences_payload)),
+            )
+            conn.commit()
+
+        return jsonify(
+            {
+                "message": "Preferences saved successfully",
+                "user_id": user_id,
+                "preferences": preferences_payload,
+            }
+        ), 200
+    except Exception as error:
+        return json_error(f"Database error: {error}", 500)
+
+
+@app.route("/preferences/<user_id>", methods=["GET"])
+def get_preferences(user_id):
+    try:
+        user_id = str(user_id).strip()
+        with get_db() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM user_preferences
+                WHERE user_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (user_id,),
+            ).fetchone()
+
+        if not row:
+            return json_error("No preferences found for this user", 404)
+
+        return jsonify(
+            {
+                "user_id": row["user_id"],
+                "course_id": row["course_id"],
+                "preferences": json.loads(row["preferences"]),
+                "updated_at": row["updated_at"],
+            }
+        ), 200
+    except Exception as error:
+        return json_error(f"Database error: {error}", 500)
+
+
+if __name__ == "__main__":
+    init_db()
+    app.run(debug=True, port=5001)

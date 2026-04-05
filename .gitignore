@@ -1,0 +1,8 @@
+.DS_Store
+.vscode/
+.venv/
+__pycache__/
+*.pyc
+
+# Local runtime artifacts
+backend/grades.db
