@@ -27,6 +27,40 @@ def json_error(message, status_code=400):
     return jsonify({"error": message}), status_code
 
 
+FORMULA_DEFAULTS = {
+    "lab_weight": 40.0,
+    "dd_weight": 60.0,
+    "lab_scale": 5.3,
+    "lab_total_points": 530.0,
+    "attendance_multiplier": 1.2,
+    "attendance_total_points": 120.0,
+    "lab_denominator_fallback": 300.0,
+    "dd_denominator_fallback": 230.0,
+}
+
+
+def validate_formula_config(config):
+    """Return a list of error strings; empty list means the config is valid."""
+    errors = []
+    for field, value in config.items():
+        if field not in FORMULA_DEFAULTS:
+            continue  # silently ignore unknown keys
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            errors.append(f"'{field}' must be a number")
+        elif value <= 0:
+            errors.append(f"'{field}' must be greater than zero")
+    return errors
+
+
+def get_formula_config_from_db(user_id):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT config FROM course_config WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+    return json.loads(row["config"]) if row else None
+
+
 def get_user_categories_from_db(user_id):
     with get_db() as conn:
         row = conn.execute(
@@ -52,6 +86,8 @@ def add_cors_headers(response):
 @app.route("/categories/<user_id>", methods=["OPTIONS"])
 @app.route("/normalize", methods=["OPTIONS"])
 @app.route("/normalize/debug", methods=["OPTIONS"])
+@app.route("/config", methods=["OPTIONS"])
+@app.route("/config/<user_id>", methods=["OPTIONS"])
 def handle_preflight(user_id=None):
     return jsonify({"status": "ok"}), 200
 
@@ -123,12 +159,14 @@ def normalize_grades():
         if not csv_data:
             return json_error("No CSV data found. Please upload a CSV first.", 404)
 
+        formula_config = get_formula_config_from_db(user_id)
         input_df = read_grades_csv(csv_data)
         result_df = build_normalized_dataframe(
             input_df,
             selected_fields,
             selected_attendance_override=selected_attendance_column,
             selected_final_exam_override=selected_final_exam_column,
+            formula_config=formula_config,
         )
         return jsonify(
             {
@@ -160,12 +198,14 @@ def normalize_grades_debug():
         if not csv_data:
             return json_error("No CSV data found. Please upload a CSV first.", 404)
 
+        formula_config = get_formula_config_from_db(user_id)
         input_df = read_grades_csv(csv_data)
         result_df, debug_payload = build_normalized_with_debug(
             input_df,
             selected_fields,
             selected_attendance_override=selected_attendance_column,
             selected_final_exam_override=selected_final_exam_column,
+            formula_config=formula_config,
         )
         return jsonify(
             {
@@ -310,6 +350,59 @@ def get_preferences(user_id):
                 "updated_at": row["updated_at"],
             }
         ), 200
+    except Exception as error:
+        return json_error(f"Database error: {error}", 500)
+
+
+@app.route("/config/<user_id>", methods=["GET"])
+def get_formula_config(user_id):
+    try:
+        config = get_formula_config_from_db(user_id)
+        if config:
+            return jsonify({"config": config, "is_custom": True}), 200
+        return jsonify({"config": FORMULA_DEFAULTS, "is_custom": False}), 200
+    except Exception as error:
+        return json_error(f"Database error: {error}", 500)
+
+
+@app.route("/config", methods=["POST"])
+def save_formula_config():
+    data = request.get_json()
+    if not data:
+        return json_error("No JSON body provided")
+
+    user_id = str(data.get("user_id", "default_user")).strip()
+    config = data.get("config", {})
+
+    if not isinstance(config, dict):
+        return json_error("Config must be an object")
+
+    errors = validate_formula_config(config)
+    if errors:
+        return json_error("; ".join(errors), 400)
+
+    try:
+        with get_db() as conn:
+            existing = conn.execute(
+                "SELECT id FROM course_config WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    """
+                    UPDATE course_config
+                    SET config = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE user_id = ?
+                    """,
+                    (json.dumps(config), user_id),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO course_config (user_id, config) VALUES (?, ?)",
+                    (user_id, json.dumps(config)),
+                )
+            conn.commit()
+        return jsonify({"message": "Formula config saved", "user_id": user_id, "config": config}), 200
     except Exception as error:
         return json_error(f"Database error: {error}", 500)
 
