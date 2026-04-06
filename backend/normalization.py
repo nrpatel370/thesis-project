@@ -125,7 +125,19 @@ def _compute_normalization(
     selected_fields,
     selected_attendance_override=None,
     selected_final_exam_override=None,
+    formula_config=None,
 ):
+    # Resolve formula weights — fall back to module-level defaults for any key not provided.
+    cfg = formula_config or {}
+    lab_weight          = float(cfg.get("lab_weight",              40.0))
+    dd_weight           = float(cfg.get("dd_weight",               60.0))
+    lab_scale           = float(cfg.get("lab_scale",               5.3))
+    lab_total_pts       = float(cfg.get("lab_total_points",        LAB_TOTAL_POINTS))
+    attendance_mult     = float(cfg.get("attendance_multiplier",   1.2))
+    attendance_total_pts = float(cfg.get("attendance_total_points", ATTENDANCE_TOTAL_POINTS))
+    lab_denom_fallback  = float(cfg.get("lab_denominator_fallback", DEFAULT_LAB_DENOMINATOR))
+    dd_denom_fallback   = float(cfg.get("dd_denominator_fallback",  DEFAULT_DD_DENOMINATOR))
+
     points_row = _extract_points_possible_row(source_df)
     clean_df = _clean_rows(source_df.copy())
     student_col, labs, debug_dungeon, attendance_col, final_exam_col = _resolve_columns(
@@ -145,47 +157,50 @@ def _compute_normalization(
     if final_exam_col and final_exam_col in clean_df.columns:
         clean_df[final_exam_col] = pd.to_numeric(clean_df[final_exam_col], errors="coerce").fillna(0)
 
-    lab_denominator = _dynamic_denominator(points_row, labs, DEFAULT_LAB_DENOMINATOR)
-    dd_denominator = _dynamic_denominator(points_row, debug_dungeon, DEFAULT_DD_DENOMINATOR)
+    lab_denominator = _dynamic_denominator(points_row, labs, lab_denom_fallback)
+    dd_denominator  = _dynamic_denominator(points_row, debug_dungeon, dd_denom_fallback)
 
     if labs:
-        lab_raw_sum = clean_df[labs].sum(axis=1)
-        lab_component = (lab_raw_sum / lab_denominator) * 40.0
+        lab_raw_sum   = clean_df[labs].sum(axis=1)
+        lab_component = (lab_raw_sum / lab_denominator) * lab_weight
     else:
-        lab_raw_sum = pd.Series(0.0, index=clean_df.index)
+        lab_raw_sum   = pd.Series(0.0, index=clean_df.index)
         lab_component = pd.Series(0.0, index=clean_df.index)
 
     if debug_dungeon:
-        dd_raw_sum = clean_df[debug_dungeon].sum(axis=1)
-        dd_component = (dd_raw_sum / dd_denominator) * 60.0
+        dd_raw_sum   = clean_df[debug_dungeon].sum(axis=1)
+        dd_component = (dd_raw_sum / dd_denominator) * dd_weight
     else:
-        dd_raw_sum = pd.Series(0.0, index=clean_df.index)
+        dd_raw_sum   = pd.Series(0.0, index=clean_df.index)
         dd_component = pd.Series(0.0, index=clean_df.index)
 
-    lab_value = (lab_component + dd_component) * 5.3
+    lab_value = (lab_component + dd_component) * lab_scale
+
     attendance_series = (
         clean_df[attendance_col]
         if attendance_col and attendance_col in clean_df.columns
         else pd.Series(0.0, index=clean_df.index)
     )
-    
     if attendance_col and _is_attendance_total_column(attendance_col):
         attendance_value = attendance_series
     else:
-        attendance_value = attendance_series * 1.2
+        attendance_value = attendance_series * attendance_mult
+
     final_exam_2 = (
-        clean_df[final_exam_col] if final_exam_col and final_exam_col in clean_df.columns else pd.Series(0.0, index=clean_df.index)
+        clean_df[final_exam_col]
+        if final_exam_col and final_exam_col in clean_df.columns
+        else pd.Series(0.0, index=clean_df.index)
     )
 
     result_df = pd.DataFrame()
     result_df["Student"] = (
         clean_df[student_col] if student_col and student_col in clean_df.columns else "Unknown"
     )
-    result_df["Lab Total"] = LAB_TOTAL_POINTS
-    result_df["Attendance Total"] = ATTENDANCE_TOTAL_POINTS
-    result_df["Lab"] = lab_value.round(0).astype(int)
-    result_df["Attendance"] = attendance_value.round(0).astype(int)
-    result_df["Final Exam 2"] = final_exam_2
+    result_df["Lab Total"]         = int(lab_total_pts)
+    result_df["Attendance Total"]  = int(attendance_total_pts)
+    result_df["Lab"]               = lab_value.round(0).astype(int)
+    result_df["Attendance"]        = attendance_value.round(0).astype(int)
+    result_df["Final Exam 2"]      = final_exam_2
 
     debug_rows = []
     for idx in clean_df.index:
@@ -245,12 +260,14 @@ def build_normalized_dataframe(
     selected_fields,
     selected_attendance_override=None,
     selected_final_exam_override=None,
+    formula_config=None,
 ):
     result_df, _ = _compute_normalization(
         df.copy(),
         selected_fields,
         selected_attendance_override=selected_attendance_override,
         selected_final_exam_override=selected_final_exam_override,
+        formula_config=formula_config,
     )
     return result_df
 
@@ -260,10 +277,12 @@ def build_normalized_with_debug(
     selected_fields,
     selected_attendance_override=None,
     selected_final_exam_override=None,
+    formula_config=None,
 ):
     return _compute_normalization(
         df.copy(),
         selected_fields,
         selected_attendance_override=selected_attendance_override,
         selected_final_exam_override=selected_final_exam_override,
+        formula_config=formula_config,
     )
