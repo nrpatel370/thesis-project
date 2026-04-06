@@ -75,6 +75,73 @@
                     </div>
                 </div>
                 
+                <div id="formulaConfig">
+                    <div class="form-group">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <label class="form-label">Configure Formula Weights (Optional)</label>
+                            <button class="btn-link" id="toggleFormula" type="button">
+                                <span id="toggleFormulaText">Show</span> ▼
+                            </button>
+                        </div>
+                        <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.5rem;">
+                            Customize grade calculation weights for your course. Leave any field blank to use the default value.
+                        </p>
+                    </div>
+                    <div id="formulaEditor" style="display:none;">
+                        <div class="column-choice-grid">
+                            <div class="column-choice">
+                                <label class="form-label" for="inputLabWeight">Lab weight</label>
+                                <input type="number" id="inputLabWeight" class="form-input" placeholder="Default: 40" min="0" step="any">
+                                <p class="hint">Portion of the combined score attributed to lab assignments.</p>
+                            </div>
+                            <div class="column-choice">
+                                <label class="form-label" for="inputDdWeight">Debug Dungeon weight</label>
+                                <input type="number" id="inputDdWeight" class="form-input" placeholder="Default: 60" min="0" step="any">
+                                <p class="hint">Portion of the combined score attributed to Debug Dungeon.</p>
+                            </div>
+                            <div class="column-choice">
+                                <label class="form-label" for="inputLabScale">Lab score multiplier</label>
+                                <input type="number" id="inputLabScale" class="form-input" placeholder="Default: 5.3" min="0" step="any">
+                                <p class="hint">Scales the combined Lab + DD score to the final Lab output. (Lab weight + DD weight) × multiplier = Lab total points.</p>
+                            </div>
+                            <div class="column-choice">
+                                <label class="form-label" for="inputLabTotalPoints">Lab total points</label>
+                                <input type="number" id="inputLabTotalPoints" class="form-input" placeholder="Default: 530" min="0" step="any">
+                                <p class="hint">Maximum possible Lab score displayed in the output. Should equal (Lab weight + DD weight) × Lab score multiplier.</p>
+                            </div>
+                            <div class="column-choice">
+                                <label class="form-label" for="inputAttendanceMult">Attendance multiplier</label>
+                                <input type="number" id="inputAttendanceMult" class="form-input" placeholder="Default: 1.2" min="0" step="any">
+                                <p class="hint">Scales the raw attendance score to the final Attendance output. Not applied when column is named "Attendance Total".</p>
+                            </div>
+                            <div class="column-choice">
+                                <label class="form-label" for="inputAttendanceTotalPoints">Attendance total points</label>
+                                <input type="number" id="inputAttendanceTotalPoints" class="form-input" placeholder="Default: 120" min="0" step="any">
+                                <p class="hint">Maximum possible Attendance score displayed in the output.</p>
+                            </div>
+                            <div class="column-choice">
+                                <label class="form-label" for="inputLabDenomFallback">Lab max points (fallback)</label>
+                                <input type="number" id="inputLabDenomFallback" class="form-input" placeholder="Default: 300" min="0" step="any">
+                                <p class="hint">Used as the lab denominator only when the CSV has no "Points Possible" row.</p>
+                            </div>
+                            <div class="column-choice">
+                                <label class="form-label" for="inputDdDenomFallback">Debug Dungeon max points (fallback)</label>
+                                <input type="number" id="inputDdDenomFallback" class="form-input" placeholder="Default: 230" min="0" step="any">
+                                <p class="hint">Used as the DD denominator only when the CSV has no "Points Possible" row.</p>
+                            </div>
+                        </div>
+                        <div class="action-row" style="margin-top:1rem;">
+                            <button class="btn btn-primary" id="saveFormula" type="button">
+                                Save Formula
+                            </button>
+                            <button class="btn btn-secondary" id="resetFormula" type="button">
+                                Reset to Defaults
+                            </button>
+                        </div>
+                        <div id="formulaMessage"></div>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label class="form-label">Upload Student Grades (CSV)</label>
                     <div class="file-upload-wrapper">

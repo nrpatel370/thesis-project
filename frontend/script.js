@@ -29,6 +29,18 @@ let currentUserId = 'temp_user_001';
 let userCategories = null;
 let latestCategorizedColumns = {};
 let savedPreferenceState = null;
+let formulaConfig = null;
+
+const FORMULA_FIELDS = [
+    { id: 'inputLabWeight',           key: 'lab_weight',              label: 'Lab weight' },
+    { id: 'inputDdWeight',            key: 'dd_weight',               label: 'Debug Dungeon weight' },
+    { id: 'inputLabScale',            key: 'lab_scale',               label: 'Lab score multiplier' },
+    { id: 'inputLabTotalPoints',      key: 'lab_total_points',        label: 'Lab total points' },
+    { id: 'inputAttendanceMult',      key: 'attendance_multiplier',   label: 'Attendance multiplier' },
+    { id: 'inputAttendanceTotalPoints', key: 'attendance_total_points', label: 'Attendance total points' },
+    { id: 'inputLabDenomFallback',    key: 'lab_denominator_fallback', label: 'Lab max points (fallback)' },
+    { id: 'inputDdDenomFallback',     key: 'dd_denominator_fallback', label: 'Debug Dungeon max points (fallback)' },
+];
  
 crnInput.addEventListener('input', (e) => {
     e.target.value = e.target.value.replace(/[^0-9]/g, '');
@@ -46,7 +58,7 @@ submitCrnBtn.addEventListener('click', async () => {
     }
     
     currentUserId = entered;
-    await loadSavedPreferences();
+    await Promise.all([loadSavedPreferences(), loadFormulaConfig()]);
     
     showMessage(crnMessage, 'CRN verified successfully!', 'success');
     setTimeout(() => {
@@ -76,6 +88,28 @@ async function loadUserCategories() {
         userCategories = await defaultResponse.json();
         renderCategoryEditor(userCategories);
     }
+}
+
+async function loadFormulaConfig() {
+    try {
+        const response = await fetch(`${API_URL}/config/${currentUserId}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        formulaConfig = data.config;
+        populateFormulaFields(formulaConfig);
+    } catch (err) {
+        console.error('Failed to load formula config:', err);
+    }
+}
+
+function populateFormulaFields(config) {
+    if (!config) return;
+    FORMULA_FIELDS.forEach(({ id, key }) => {
+        const input = document.getElementById(id);
+        if (input && config[key] !== undefined) {
+            input.value = config[key];
+        }
+    });
 }
 
 async function loadSavedPreferences() {
@@ -230,6 +264,96 @@ document.getElementById('saveCategories').addEventListener('click', async () => 
 });
  
  
+document.getElementById('toggleFormula').addEventListener('click', () => {
+    const editor = document.getElementById('formulaEditor');
+    const text   = document.getElementById('toggleFormulaText');
+    if (editor.style.display === 'none') {
+        editor.style.display = 'block';
+        text.textContent = 'Hide';
+    } else {
+        editor.style.display = 'none';
+        text.textContent = 'Show';
+    }
+});
+
+document.getElementById('saveFormula').addEventListener('click', async () => {
+    const config = {};
+    const errors = [];
+
+    FORMULA_FIELDS.forEach(({ id, key, label }) => {
+        const raw = document.getElementById(id)?.value.trim();
+        if (!raw) return; // blank = keep using the server-side default
+
+        // Reject anything that isn't a finite positive number.
+        const num = Number(raw);
+        if (!Number.isFinite(num) || raw === '') {
+            errors.push(`"${label}" must be a number`);
+        } else if (num <= 0) {
+            errors.push(`"${label}" must be greater than zero`);
+        } else {
+            config[key] = num;
+        }
+    });
+
+    if (errors.length > 0) {
+        showMessage(
+            document.getElementById('formulaMessage'),
+            errors.join('<br>'),
+            'error'
+        );
+        return;
+    }
+
+    const saveBtn = document.getElementById('saveFormula');
+    saveBtn.disabled    = true;
+    saveBtn.textContent = 'Saving...';
+
+    try {
+        const response = await fetch(`${API_URL}/config`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: currentUserId, config }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Save failed');
+        formulaConfig = data.config;
+        showMessage(document.getElementById('formulaMessage'), '✓ Formula saved successfully!', 'success');
+    } catch (err) {
+        showMessage(document.getElementById('formulaMessage'), `✗ ${err.message}`, 'error');
+    } finally {
+        saveBtn.disabled    = false;
+        saveBtn.textContent = 'Save Formula';
+    }
+});
+
+document.getElementById('resetFormula').addEventListener('click', async () => {
+    const resetBtn = document.getElementById('resetFormula');
+    resetBtn.disabled    = true;
+    resetBtn.textContent = 'Resetting...';
+
+    try {
+        const response = await fetch(`${API_URL}/config`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: currentUserId, config: {} }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Reset failed');
+
+        formulaConfig = {};
+        FORMULA_FIELDS.forEach(({ id }) => {
+            const input = document.getElementById(id);
+            if (input) input.value = '';
+        });
+        showMessage(document.getElementById('formulaMessage'), '✓ Formula reset to defaults.', 'success');
+    } catch (err) {
+        showMessage(document.getElementById('formulaMessage'), `✗ ${err.message}`, 'error');
+    } finally {
+        resetBtn.disabled    = false;
+        resetBtn.textContent = 'Reset to Defaults';
+    }
+});
+
 const csvFileInput   = document.getElementById('csvFile');
 const fileLabel      = document.getElementById('fileLabel');
 const fileName       = document.getElementById('fileName');
@@ -334,12 +458,23 @@ function renderCategorySelections(categories) {
     // Columns controlled exclusively by the dropdowns — checkboxes are disabled for these.
     const dropdownControlledCols = new Set([...attendanceCandidates, ...finalExamCandidates]);
 
+    // Only these categories feed into the grade calculation.
+    const CALCULATION_CATEGORIES = new Set(['labs', 'debug_dungeon', 'participation']);
+
     const renderColCheckbox = (col, category) => {
         if (dropdownControlledCols.has(col)) {
             return `
                 <label class="checkbox-label" style="opacity:0.5;cursor:default;" title="This column is selected via the dropdown above">
                     <input type="checkbox" name="preference" value="${col}" data-category="${category}" disabled>
                     <span>${col} <em style="font-size:0.8em;color:var(--text-secondary);">(via dropdown)</em></span>
+                </label>
+            `;
+        }
+        if (!CALCULATION_CATEGORIES.has(category)) {
+            return `
+                <label class="checkbox-label" style="opacity:0.45;cursor:default;">
+                    <input type="checkbox" name="preference" value="${col}" data-category="${category}" disabled>
+                    <span>${col}</span>
                 </label>
             `;
         }
@@ -352,16 +487,18 @@ function renderCategorySelections(categories) {
     };
 
     const renderCategoryGroup = (category, cols) => {
-        const hasActiveCheckboxes = cols.some(col => !dropdownControlledCols.has(col));
+        const isCalc = CALCULATION_CATEGORIES.has(category);
+        const hasActiveCheckboxes = isCalc && cols.some(col => !dropdownControlledCols.has(col));
         return `
-            <div class="category-group">
+            <div class="category-group"${!isCalc ? ' style="opacity:0.5;"' : ''}>
                 <div class="category-header">
                     <p class="category-title">${CATEGORY_LABELS[category] || capitalize(category)}</p>
-                    <label class="checkbox-label category-checkbox"${!hasActiveCheckboxes ? ' style="opacity:0.5;pointer-events:none;"' : ''}>
+                    <label class="checkbox-label category-checkbox" style="${!hasActiveCheckboxes ? 'opacity:0.5;pointer-events:none;' : ''}">
                         <input type="checkbox" class="category-select" data-category="${category}"${hasActiveCheckboxes ? ' checked' : ' disabled'}>
                         <span style="font-size:0.85rem;color:var(--text-secondary);">Select all</span>
                     </label>
                 </div>
+                ${!isCalc ? '<p class="hint" style="margin-top:0;margin-bottom:0.5rem;">Not included in grade calculation.</p>' : ''}
                 <div class="category-items">
                     ${cols.map(col => renderColCheckbox(col, category)).join('')}
                 </div>
@@ -399,17 +536,21 @@ function renderCategorySelections(categories) {
             <div class="column-choice-grid">
                 <div class="column-choice">
                     <label class="form-label" for="attendanceColumnSelect">Attendance column (choose one)</label>
-                    <select id="attendanceColumnSelect" class="form-select">
-                        <option value="">Auto-detect</option>
-                        ${attendanceCandidates.map(col => `<option value="${col}" ${col === attendanceDefault ? 'selected' : ''}>${col}</option>`).join('')}
-                    </select>
+                    ${attendanceCandidates.length > 0
+                        ? `<select id="attendanceColumnSelect" class="form-select">
+                            ${attendanceCandidates.map(col => `<option value="${col}" ${col === attendanceDefault ? 'selected' : ''}>${col}</option>`).join('')}
+                           </select>`
+                        : `<p class="hint" style="margin-top:0.4rem;">No column headers found matching attendance category keywords. Attendance will be recorded as 0.</p>`
+                    }
                 </div>
                 <div class="column-choice">
                     <label class="form-label" for="finalExamColumnSelect">Final Exam column (choose one)</label>
-                    <select id="finalExamColumnSelect" class="form-select">
-                        <option value="">Auto-detect</option>
-                        ${finalExamCandidates.map(col => `<option value="${col}" ${col === finalExamDefault ? 'selected' : ''}>${col}</option>`).join('')}
-                    </select>
+                    ${finalExamCandidates.length > 0
+                        ? `<select id="finalExamColumnSelect" class="form-select">
+                            ${finalExamCandidates.map(col => `<option value="${col}" ${col === finalExamDefault ? 'selected' : ''}>${col}</option>`).join('')}
+                           </select>`
+                        : `<p class="hint" style="margin-top:0.4rem;">No column headers found matching final exam category keywords. Final Exam 2 will be recorded as 0.</p>`
+                    }
                 </div>
             </div>
             <div id="calculationScope" class="scope-summary"></div>
@@ -572,8 +713,8 @@ function updateCalculationScopeSummary() {
         <strong>Calculation scope:</strong>
         Labs selected: ${labCount},
         Debug Dungeon selected: ${ddCount},
-        Attendance column: ${selectedAttendance || 'Auto-detect'},
-        Final Exam column: ${selectedFinalExam || 'Auto-detect'}
+        Attendance column: ${selectedAttendance || 'None found'},
+        Final Exam column: ${selectedFinalExam || 'None found'}
     `;
 }
 
