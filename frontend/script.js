@@ -1,6 +1,24 @@
+/**
+ * 
+ * Flow:
+ *  1. TA enters a CRN -> verified against VALID_CRN -> saved preferences and
+ *     formula config are loaded from the API in parallel.
+ *  2. TA uploads a Canvas gradebook CSV -> the backend categorises columns and
+ *     returns them; renderCategorySelections() builds the checkbox UI.
+ *  3. TA reviews/adjusts column selections and dropdown overrides for
+ *     Attendance and Final Exam, then clicks "Save & Calculate Grades".
+ *  4. Selections are persisted to the API and the normalization endpoint is
+ *     called; displayNormalizedResults() renders the output table.
+ *
+ * savedPreferenceState intentionally survives between CSV uploads (i.e. it is
+ * NOT cleared in resetToUploadNewFile) so TAs can process multiple lab-section
+ * CSVs without reselecting the same columns each time.
+ */
+
 import { API_URL, CATEGORY_LABELS, VALID_CRN } from "./js/constants.js";
 import { capitalize, showMessage } from "./js/helpers.js";
 
+// ─── Theme toggle ────────────────────────────────────────────────────────────
 const themeToggle = document.getElementById('themeToggle');
 const themeIcon = document.getElementById('themeIcon');
 
@@ -20,17 +38,20 @@ themeToggle.addEventListener('click', () => {
 });
 
  
+// ─── CRN section — state and DOM refs ────────────────────────────────────────
 const crnInput     = document.getElementById('crnInput');
 const submitCrnBtn = document.getElementById('submitCrn');
 const crnMessage   = document.getElementById('crnMessage');
 const uploadSection= document.getElementById('uploadSection');
- 
-let currentUserId = 'temp_user_001';
-let userCategories = null;
-let latestCategorizedColumns = {};
-let savedPreferenceState = null;
-let formulaConfig = null;
 
+let currentUserId = 'temp_user_001';        // set to the verified CRN on submit
+let userCategories = null;                  // custom or default category config
+let latestCategorizedColumns = {};          // most recent upload's column-to-category map
+let savedPreferenceState = null;            // persists across CSV re-uploads
+let formulaConfig = null;                   // active formula weights for this CRN
+
+// Maps each formula input's element ID to the backend config key and display label.
+// Used by save/populate/reset handlers to avoid duplicating field metadata.
 const FORMULA_FIELDS = [
     { id: 'inputLabWeight',           key: 'lab_weight',              label: 'Lab weight' },
     { id: 'inputDdWeight',            key: 'dd_weight',               label: 'Debug Dungeon weight' },
@@ -42,6 +63,7 @@ const FORMULA_FIELDS = [
     { id: 'inputDdDenomFallback',     key: 'dd_denominator_fallback', label: 'Debug Dungeon max points (fallback)' },
 ];
  
+// Restrict CRN input to digits only, preventing accidental letter entry.
 crnInput.addEventListener('input', (e) => {
     e.target.value = e.target.value.replace(/[^0-9]/g, '');
 });
@@ -73,6 +95,8 @@ crnInput.addEventListener('keypress', (e) => {
 });
  
  
+// ─── API data loaders ─────────────────────────────────────────────────────────
+
 async function loadUserCategories() {
     try {
         const response = await fetch(`${API_URL}/categories/${currentUserId}`);
@@ -139,6 +163,8 @@ async function loadSavedPreferences() {
     }
 }
  
+// ─── Category editor ──────────────────────────────────────────────────────────
+
 document.getElementById('toggleCategories').addEventListener('click', () => {
     const editor = document.getElementById('categoryEditor');
     const toggleText = document.getElementById('toggleText');
@@ -264,6 +290,8 @@ document.getElementById('saveCategories').addEventListener('click', async () => 
 });
  
  
+// ─── Formula config editor ────────────────────────────────────────────────────
+
 document.getElementById('toggleFormula').addEventListener('click', () => {
     const editor = document.getElementById('formulaEditor');
     const text   = document.getElementById('toggleFormulaText');
@@ -354,6 +382,8 @@ document.getElementById('resetFormula').addEventListener('click', async () => {
     }
 });
 
+// ─── CSV file input and upload ────────────────────────────────────────────────
+
 const csvFileInput   = document.getElementById('csvFile');
 const fileLabel      = document.getElementById('fileLabel');
 const fileName       = document.getElementById('fileName');
@@ -439,6 +469,8 @@ processFileBtn.addEventListener('click', async () => {
 });
  
  
+// ─── Column-selection panel ───────────────────────────────────────────────────
+
 function renderCategorySelections(categories) {
     document.getElementById('selectionsPanel')?.remove();
     latestCategorizedColumns = categories || {};
@@ -608,6 +640,8 @@ function renderCategorySelections(categories) {
     updateCalculationScopeSummary();
 }
 
+// ─── Checkbox state helpers ───────────────────────────────────────────────────
+
 function applySavedPreferencesToSelections() {
     if (!savedPreferenceState) return;
 
@@ -696,6 +730,8 @@ function updateMasterCheckbox() {
     }
 }
  
+// Returns the dropdown-selected attendance and final exam column names.
+// Returns empty strings when the relevant dropdown is absent (no candidates found).
 function getSelectedSingleColumns() {
     const selectedAttendance = document.getElementById('attendanceColumnSelect')?.value || '';
     const selectedFinalExam = document.getElementById('finalExamColumnSelect')?.value || '';
@@ -719,6 +755,8 @@ function updateCalculationScopeSummary() {
 }
 
  
+// ─── Normalization and preferences persistence ────────────────────────────────
+
 async function persistUserPreferencesToServer(checkedColumns, selectedAttendance, selectedFinalExam) {
     const prefResponse = await fetch(`${API_URL}/save-preferences`, {
         method: 'POST',
@@ -852,6 +890,8 @@ async function runDebugNormalization() {
     }
 }
  
+// ─── Results display ──────────────────────────────────────────────────────────
+
 function displayNormalizedResults(data) {
     document.getElementById('resultsPanel')?.remove();
     document.getElementById('debugPanel')?.remove();
@@ -965,6 +1005,8 @@ function displayDebugResults(debug) {
     document.querySelector('.card').appendChild(panel);
 }
  
+// ─── CSV export ───────────────────────────────────────────────────────────────
+
 function downloadCSV(columns, data, filename) {
     let csv = columns.join(',') + '\n';
     data.forEach(row => {

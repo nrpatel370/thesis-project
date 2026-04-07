@@ -1,3 +1,22 @@
+"""
+Flask REST API for the Grade Normalizer application.
+
+Endpoints:
+  POST /upload                — parse a Canvas CSV export and return categorized columns
+  POST /normalize             — normalize grades using the TA's column selections
+  POST /normalize/debug       — same as /normalize but includes per-student debug info
+  GET  /categories/defaults   — return the built-in keyword-to-category mapping
+  GET  /categories/<user_id>  — return the saved (or default) categories for a CRN
+  POST /categories            — save custom categories for a CRN
+  GET  /preferences/<user_id> — return the saved column-selection preferences for a CRN
+  POST /save-preferences      — persist column-selection preferences for a CRN
+  GET  /config/<user_id>      — return the saved (or default) formula weights for a CRN
+  POST /config                — save custom formula weights for a CRN
+
+All endpoints include CORS headers so the static frontend can reach the API
+from a different origin during local development.
+"""
+
 import io
 import json
 
@@ -27,6 +46,8 @@ def json_error(message, status_code=400):
     return jsonify({"error": message}), status_code
 
 
+# default formula weights returned when a CRN has no saved config.
+# These match the placeholder text shown in the frontend formula inputs.
 FORMULA_DEFAULTS = {
     "lab_weight": 40.0,
     "dd_weight": 60.0,
@@ -53,6 +74,7 @@ def validate_formula_config(config):
 
 
 def get_formula_config_from_db(user_id):
+    """Return the saved formula config dict for this CRN, or None if not set."""
     with get_db() as conn:
         row = conn.execute(
             "SELECT config FROM course_config WHERE user_id = ?",
@@ -62,6 +84,7 @@ def get_formula_config_from_db(user_id):
 
 
 def get_user_categories_from_db(user_id):
+    """Return the saved custom categories dict for this CRN, or None if not set."""
     with get_db() as conn:
         row = conn.execute(
             "SELECT categories FROM user_categories WHERE user_id = ?",

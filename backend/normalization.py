@@ -1,3 +1,29 @@
+"""
+Core grade-normalization logic for the Grade Normalizer backend.
+
+The public entry points are:
+  build_normalized_dataframe()   — returns just the result DataFrame
+  build_normalized_with_debug()  — returns the DataFrame plus a debug payload
+
+Both delegate to the private _compute_normalization(), which:
+  1. Extracts the optional "Points Possible" row from the raw CSV.
+  2. Strips non-student rows (_clean_rows).
+  3. Resolves which columns to use for labs, Debug Dungeon, attendance, and
+     Final Exam 2 based solely on the TA's UI selections (_resolve_columns).
+  4. Computes per-student Lab and Attendance scores using configurable formula
+     weights (_compute_normalization / _dynamic_denominator).
+
+Formula math (default weights):
+  lab_component  = (lab_raw_sum  / lab_denominator)  × 40
+  dd_component   = (dd_raw_sum   / dd_denominator)   × 60
+  lab_value      = (lab_component + dd_component)     × 5.3   max ≈ 530 pts
+  attendance     = raw_attendance × 1.2               max ≈ 120 pts
+  (multiplier skipped when the column is literally "Attendance Total")
+
+All eight weights are overridable per-CRN via the formula_config dict loaded
+from the course_config database table.
+"""
+
 import pandas as pd
 
 from constants import LAB_TOTAL_POINTS, ATTENDANCE_TOTAL_POINTS
@@ -7,14 +33,26 @@ DEFAULT_DD_DENOMINATOR = 230.0
 
 
 def _normalize_header_name(value):
+    """Collapse whitespace and lowercase a header string for reliable comparisons."""
     return " ".join(value.strip().split()).lower()
 
 
 def _is_attendance_total_column(column_name):
+    """Return True if the column is the Canvas "Attendance Total" aggregate.
+
+    When this column is selected the multiplier is skipped. The value is
+    already a total rather than a raw per-session score.
+    """
     return _normalize_header_name(column_name) == "attendance total"
 
 
 def _clean_rows(df):
+    """Remove non-student rows from the DataFrame.
+
+    Canvas gradebook exports include a "Points Possible" meta-row and sometimes
+    blank rows. Both are excluded so normalization operates only on real student
+    records. The index is reset so subsequent positional operations work correctly.
+    """
     if len(df) == 0:
         return df
     first_col = df.columns[0]
@@ -30,6 +68,13 @@ def count_gradesheet_data_rows(df):
 
 
 def _extract_points_possible_row(df):
+    """Return the "Points Possible" row from the raw DataFrame, or None if absent.
+
+    Canvas always inserts this row immediately after the header. It stores the
+    maximum possible score for each assignment column and is used to compute
+    dynamic denominators so the normalization stays correct even when point
+    totals change between semesters.
+    """
     if len(df) == 0:
         return None
 
@@ -42,6 +87,13 @@ def _extract_points_possible_row(df):
 
 
 def _dynamic_denominator(points_row, columns, default_value):
+    """Sum the Points Possible values across the given columns.
+
+    If the CSV has a Points Possible row, its values are used as the denominator
+    for the relevant score bucket. If the row is absent, or the sum works out to
+    zero (e.g. all extra-credit columns whose Points Possible is 0), the
+    caller-supplied default_value is used instead.
+    """
     if points_row is None or not columns:
         return default_value
 
@@ -62,6 +114,15 @@ def _resolve_columns(
     selected_attendance_override=None,
     selected_final_exam_override=None,
 ):
+    """Map the TA's UI selections to concrete DataFrame column lists.
+
+    Labs and Debug Dungeon columns come exclusively from the checked checkboxes
+    (selected_fields). Attendance and Final Exam fall back to Canvas naming
+    conventions when no dropdown override is supplied.
+
+    Returns a 5-tuple: (student_col, labs, debug_dungeon, attendance_col, final_exam_col)
+    where any element may be None/empty if the relevant columns are absent.
+    """
     # User selections are authoritative for labs and debug dungeon.
     # Whatever the TA checked is exactly what goes into the calculation — no hidden
     # prefix-detection layer filtering or overriding the selection.
@@ -84,8 +145,6 @@ def _resolve_columns(
             if col_name in clean_df.columns:
                 student_col = col_name
 
-    # Attendance: dropdown override → auto-detect exact "Attendance Total" header → nothing.
-    # The auto-detect fallback handles the case where the TA leaves the dropdown on "Auto-detect".
     attendance_col = None
     if selected_attendance_override and selected_attendance_override in clean_df.columns:
         attendance_col = selected_attendance_override
@@ -262,6 +321,11 @@ def build_normalized_dataframe(
     selected_final_exam_override=None,
     formula_config=None,
 ):
+    """Normalize grades and return only the result DataFrame.
+
+    Convenience wrapper around _compute_normalization for callers that do not
+    need the debug payload (i.e. the standard /normalize endpoint).
+    """
     result_df, _ = _compute_normalization(
         df.copy(),
         selected_fields,
@@ -279,6 +343,11 @@ def build_normalized_with_debug(
     selected_final_exam_override=None,
     formula_config=None,
 ):
+    """Normalize grades and return both the result DataFrame and the debug payload.
+
+    Used by the /normalize/debug endpoint so TAs can verify denominator values,
+    column detection, and intermediate per-student calculations.
+    """
     return _compute_normalization(
         df.copy(),
         selected_fields,
