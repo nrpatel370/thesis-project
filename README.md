@@ -99,7 +99,7 @@ Then navigate to `http://localhost:8080`.
 
 **CRN mode:** Type any 5–6 digit Course Reference Number and press **Verify CRN**. Previously saved column preferences and formula weights for that CRN are loaded automatically.
 
-**Guest mode:** Click **Continue as Guest** to skip CRN entry. The full tool is available but nothing will be saved — preferences, formula changes, and category edits apply for the current session only.
+**Guest mode:** Click **Continue as Guest** to skip CRN entry. The full tool is available but nothing will be saved (preferences, formula changes, and category edits apply for the current session only).
 
 ### 2. (Optional) Configure formula weights
 
