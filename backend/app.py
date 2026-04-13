@@ -182,7 +182,10 @@ def normalize_grades():
         if not csv_data:
             return json_error("No CSV data found. Please upload a CSV first.", 404)
 
-        formula_config = get_formula_config_from_db(user_id)
+        # Prefer an inline formula_config from the request body (used by guest sessions
+        # which cannot persist config to the DB) over the stored per-CRN config.
+        inline_config = data.get("formula_config")
+        formula_config = inline_config if inline_config is not None else get_formula_config_from_db(user_id)
         input_df = read_grades_csv(csv_data)
         result_df = build_normalized_dataframe(
             input_df,
@@ -221,7 +224,9 @@ def normalize_grades_debug():
         if not csv_data:
             return json_error("No CSV data found. Please upload a CSV first.", 404)
 
-        formula_config = get_formula_config_from_db(user_id)
+        # Same inline-config precedence as /normalize
+        inline_config = data.get("formula_config")
+        formula_config = inline_config if inline_config is not None else get_formula_config_from_db(user_id)
         input_df = read_grades_csv(csv_data)
         result_df, debug_payload = build_normalized_with_debug(
             input_df,

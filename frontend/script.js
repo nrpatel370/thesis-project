@@ -13,9 +13,16 @@
  * savedPreferenceState intentionally survives between CSV uploads (i.e. it is
  * NOT cleared in resetToUploadNewFile) so TAs can process multiple lab-section
  * CSVs without reselecting the same columns each time.
+ *
+ * Two entry modes:
+ *  CRN mode: any valid 5–6 digit CRN; preferences, formula config, and
+ *              categories are loaded from and saved to the API.
+ *  Guest mode: no CRN required; full normalization works end-to-end but
+ *              nothing is persisted to the database. Formula overrides are
+ *              sent inline with each normalize request instead.
  */
 
-import { API_URL, CATEGORY_LABELS, VALID_CRN } from "./js/constants.js";
+import { API_URL, CATEGORY_LABELS } from "./js/constants.js";
 import { capitalize, showMessage } from "./js/helpers.js";
 
 // ─── Theme toggle ────────────────────────────────────────────────────────────
@@ -44,10 +51,11 @@ const submitCrnBtn = document.getElementById('submitCrn');
 const crnMessage   = document.getElementById('crnMessage');
 const uploadSection= document.getElementById('uploadSection');
 
-let currentUserId = 'temp_user_001';        // set to the verified CRN on submit
+let currentUserId = 'guest';                // overwritten with the CRN on verify
+let isGuestMode = false;                    // true when "Continue as Guest" was chosen
 let userCategories = null;                  // custom or default category config
 let latestCategorizedColumns = {};          // most recent upload's column-to-category map
-let savedPreferenceState = null;            // persists across CSV re-uploads
+let savedPreferenceState = null;            // persists across CSV re-uploads (CRN mode only)
 let formulaConfig = null;                   // active formula weights for this CRN
 
 // Maps each formula input's element ID to the backend config key and display label.
@@ -74,20 +82,32 @@ submitCrnBtn.addEventListener('click', async () => {
         showMessage(crnMessage, 'Please enter a valid 5-6 digit CRN', 'error');
         return;
     }
-    if (entered !== VALID_CRN) {
-        showMessage(crnMessage, 'Invalid CRN. Please try again.', 'error');
-        return;
-    }
-    
+
+    isGuestMode   = false;
     currentUserId = entered;
     await Promise.all([loadSavedPreferences(), loadFormulaConfig()]);
-    
+
     showMessage(crnMessage, 'CRN verified successfully!', 'success');
     setTimeout(() => {
         uploadSection.classList.add('active');
         crnInput.disabled     = true;
         submitCrnBtn.disabled = true;
+        document.getElementById('continueAsGuest').disabled = true;
     }, 500);
+});
+
+document.getElementById('continueAsGuest').addEventListener('click', () => {
+    isGuestMode   = true;
+    currentUserId = 'guest';
+
+    // Show the guest banner inside the upload section.
+    const banner = document.getElementById('guestBanner');
+    if (banner) banner.style.display = 'flex';
+
+    uploadSection.classList.add('active');
+    crnInput.disabled     = true;
+    submitCrnBtn.disabled = true;
+    document.getElementById('continueAsGuest').disabled = true;
 });
  
 crnInput.addEventListener('keypress', (e) => {
@@ -115,6 +135,8 @@ async function loadUserCategories() {
 }
 
 async function loadFormulaConfig() {
+    // Guest sessions have no saved config 
+    if (isGuestMode) return;
     try {
         const response = await fetch(`${API_URL}/config/${currentUserId}`);
         if (!response.ok) return;
@@ -138,6 +160,8 @@ function populateFormulaFields(config) {
 
 async function loadSavedPreferences() {
     savedPreferenceState = null;
+    // Guest sessions have no stored preferences 
+    if (isGuestMode) return;
     try {
         const response = await fetch(`${API_URL}/preferences/${currentUserId}`);
         if (!response.ok) return;
@@ -233,6 +257,15 @@ document.getElementById('addCategory').addEventListener('click', () => {
 });
  
 document.getElementById('saveCategories').addEventListener('click', async () => {
+    if (isGuestMode) {
+        showMessage(
+            document.getElementById('categoryMessage'),
+            'Guest mode (verify a CRN to save custom categories).',
+            'error'
+        );
+        return;
+    }
+
     const categoryItems = document.querySelectorAll('.category-edit-item');
     const categories = {};
     
@@ -305,6 +338,15 @@ document.getElementById('toggleFormula').addEventListener('click', () => {
 });
 
 document.getElementById('saveFormula').addEventListener('click', async () => {
+    if (isGuestMode) {
+        showMessage(
+            document.getElementById('formulaMessage'),
+            'Guest mode (verify a CRN to save formula settings.)',
+            'error'
+        );
+        return;
+    }
+
     const config = {};
     const errors = [];
 
@@ -356,6 +398,18 @@ document.getElementById('saveFormula').addEventListener('click', async () => {
 
 document.getElementById('resetFormula').addEventListener('click', async () => {
     const resetBtn = document.getElementById('resetFormula');
+
+    // In guest mode there is nothing to clear on the server so just wipe the inputs locally.
+    if (isGuestMode) {
+        formulaConfig = null;
+        FORMULA_FIELDS.forEach(({ id }) => {
+            const input = document.getElementById(id);
+            if (input) input.value = '';
+        });
+        showMessage(document.getElementById('formulaMessage'), '✓ Formula reset to defaults.', 'success');
+        return;
+    }
+
     resetBtn.disabled    = true;
     resetBtn.textContent = 'Resetting...';
 
@@ -564,6 +618,7 @@ function renderCategorySelections(categories) {
             </div>
             <p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:1.2rem;">
                 Choose which columns to include in the grade calculation.
+                ${!isGuestMode ? 'Previously saved preferences are applied automatically.' : ''}
             </p>
             <div class="column-choice-grid">
                 <div class="column-choice">
@@ -590,12 +645,13 @@ function renderCategorySelections(categories) {
         </div>
         <div class="action-row">
             <button type="button" class="btn btn-primary" id="savePreferences" style="margin-top:1.5rem;">
-                Save & Calculate Grades
+                ${isGuestMode ? 'Calculate Grades' : 'Save & Calculate Grades'}
             </button>
             <button type="button" class="btn btn-secondary" id="debugNormalize" style="margin-top:1.5rem;">
                 Debug Normalize
             </button>
         </div>
+        ${isGuestMode ? '<p class="hint" style="margin-top:0.5rem;">Guest mode — results will not be saved.</p>' : ''}
         <div id="prefMessage"></div>
     `;
  
@@ -757,7 +813,27 @@ function updateCalculationScopeSummary() {
  
 // ─── Normalization and preferences persistence ────────────────────────────────
 
+/**
+ * Read the formula weight inputs and return a config object for inline use.
+ * Only fields with valid, positive finite numbers are included. Blank fields
+ * are omitted so the backend falls back to its own defaults for those keys.
+ * Used by guest sessions to pass formula overrides directly in the request body.
+ */
+function getFormulaConfigFromUI() {
+    const config = {};
+    FORMULA_FIELDS.forEach(({ id, key }) => {
+        const raw = document.getElementById(id)?.value.trim();
+        if (!raw) return;
+        const num = Number(raw);
+        if (Number.isFinite(num) && num > 0) config[key] = num;
+    });
+    return Object.keys(config).length > 0 ? config : null;
+}
+
 async function persistUserPreferencesToServer(checkedColumns, selectedAttendance, selectedFinalExam) {
+    // Guest sessions skip persistence entirely — nothing is stored to the DB.
+    if (isGuestMode) return;
+
     const prefResponse = await fetch(`${API_URL}/save-preferences`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -821,15 +897,23 @@ function getSelectedFields() {
 async function runNormalization(selectedFields) {
     try {
         const { selectedAttendance, selectedFinalExam } = getSelectedSingleColumns();
+
+        // Guests cannot store formula config, so send any UI overrides inline.
+        const body = {
+            user_id: currentUserId,
+            selected_fields: selectedFields,
+            selected_attendance_column: selectedAttendance || null,
+            selected_final_exam_column: selectedFinalExam || null,
+        };
+        if (isGuestMode) {
+            const uiConfig = getFormulaConfigFromUI();
+            if (uiConfig) body.formula_config = uiConfig;
+        }
+
         const response = await fetch(`${API_URL}/normalize`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                user_id: currentUserId,
-                selected_fields: selectedFields,
-                selected_attendance_column: selectedAttendance || null,
-                selected_final_exam_column: selectedFinalExam || null
-            })
+            body: JSON.stringify(body),
         });
  
         const data = await response.json();
@@ -864,15 +948,23 @@ async function runDebugNormalization() {
             selectedAttendance,
             selectedFinalExam
         );
+
+        // Guests send formula overrides inline (same pattern as runNormalization).
+        const body = {
+            user_id: currentUserId,
+            selected_fields: selectedFields,
+            selected_attendance_column: selectedAttendance || null,
+            selected_final_exam_column: selectedFinalExam || null,
+        };
+        if (isGuestMode) {
+            const uiConfig = getFormulaConfigFromUI();
+            if (uiConfig) body.formula_config = uiConfig;
+        }
+
         const response = await fetch(`${API_URL}/normalize/debug`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                user_id: currentUserId,
-                selected_fields: selectedFields,
-                selected_attendance_column: selectedAttendance || null,
-                selected_final_exam_column: selectedFinalExam || null
-            })
+            body: JSON.stringify(body),
         });
 
         const data = await response.json();

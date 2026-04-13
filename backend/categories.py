@@ -21,13 +21,13 @@ def get_default_categories():
     Categories not matched by any keyword fall into the implicit `other` bucket.
     """
     return {
-        "assignments": {"keywords": ["assign", "hw", "homework", "project", "problem set", "ps"]},
+        "assignments": {"keywords": ["hw", "homework", "project", "problem set", "ps"]},
         # "lab" is intentionally excluded since it is too broad and would match Canvas aggregate
         # columns like "Lab Total", "Lab Current Score", etc. Use "lab assignment" to target
         # only individual scored items. "extra credit" is included so those columns appear
         # in the labs group and are summed into the numerator; Canvas sets their Points
         # Possible to 0, so the denominator is unaffected and scores can exceed 100%.
-        "labs": {"keywords": ["lab assignment", "extra credit", "practical", "workshop"]},
+        "labs": {"keywords": ["assign","lab assignment", "extra credit", "practical", "workshop"]},
         "exams": {"keywords": ["exam", "midterm", "final", "quiz", "test"]},
         "attendance": {"keywords": ["attendance", "roll call", "present", "absent"]},
         "debug_dungeon": {"keywords": ["debug dungeon", "dungeon", "dd week"]},

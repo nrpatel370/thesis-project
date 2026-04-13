@@ -8,12 +8,14 @@ A lightweight web app for Teaching Assistants to upload Canvas gradebook CSV exp
 
 Canvas exports gradebooks with raw per-assignment scores scattered across dozens of columns. This tool lets TAs:
 
-1. Verify their course CRN to load their saved settings.
+1. Choose a mode: **CRN** to load saved settings, or **Guest** for one-off use.
 2. Upload a Canvas CSV export for any lab section.
 3. Review and adjust which columns feed into each grade bucket.
 4. Run normalization and download the results as a clean CSV.
 
-Preferences and formula weights are saved per-CRN so uploading a second section CSV for the same course requires no reconfiguration.
+**CRN mode:** Preferences, formula weights, and categories are saved per-CRN so uploading a second section CSV for the same course requires no reconfiguration.
+
+**Guest mode:** Full normalization works end-to-end, but nothing is stored to the database. Formula overrides are applied for the current session only.
 
 ---
 
@@ -93,10 +95,11 @@ Then navigate to `http://localhost:8080`.
 
 ## Usage
 
-### 1. Enter your CRN
+### 1. Choose your mode
 
-Type your 5–6 digit Course Reference Number and press **Verify**. This loads any previously saved column preferences and formula weights for that course.
+**CRN mode:** Type any 5–6 digit Course Reference Number and press **Verify CRN**. Previously saved column preferences and formula weights for that CRN are loaded automatically.
 
+**Guest mode:** Click **Continue as Guest** to skip CRN entry. The full tool is available but nothing will be saved — preferences, formula changes, and category edits apply for the current session only.
 
 ### 2. (Optional) Configure formula weights
 

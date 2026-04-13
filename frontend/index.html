@@ -26,7 +26,7 @@
     <div class="container">
         <div class="header">
             <h1>Student Grade Normalization</h1>
-            <p>Enter your CRN to access the grade normalization tool</p>
+            <p>Enter your CRN to load saved settings, or continue as a guest</p>
         </div>
 
         <div class="card">
@@ -42,13 +42,24 @@
                         pattern="[0-9]*"
                     >
                 </div>
-                <button class="btn btn-primary" id="submitCrn" type="button">
-                    Verify CRN
-                </button>
+                <div class="action-row" style="margin-top:0;">
+                    <button class="btn btn-primary" id="submitCrn" type="button">
+                        Register/Login with CRN
+                    </button>
+                    <button class="btn btn-secondary" id="continueAsGuest" type="button">
+                        Continue as Guest
+                    </button>
+                </div>
                 <div id="crnMessage"></div>
             </div>
 
             <div class="upload-section" id="uploadSection">
+                <!-- Shown only in guest mode -->
+                <div id="guestBanner" style="display:none;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;padding:0.65rem 1rem;margin-bottom:1.25rem;display:none;align-items:center;gap:0.75rem; margin-top: 15px;">
+                    <span style="font-weight:600;font-size:0.9rem;">Guest Mode</span>
+                    <span style="font-size:0.85rem;color:var(--text-secondary);">Your preferences, categories, and formula settings will not be saved.</span>
+                </div>
+
                 <div id="categoryConfig">
                     <div class="form-group">
                         <div style="display:flex;justify-content:space-between;align-items:center;">
