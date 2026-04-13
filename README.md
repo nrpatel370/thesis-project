@@ -189,4 +189,4 @@ SQLite database stored at `backend/grades.db`.
 | `user_categories` | Stores custom keyword-to-category mappings per CRN |
 | `course_config` | Stores custom formula weights per CRN |
 
-Only the latest CSV upload is kept per CRN — older rows are pruned automatically on each new upload to prevent unbounded growth.
+Only the latest CSV upload is kept per CRN (older rows are pruned automatically on each new upload to prevent unbounded growth).
