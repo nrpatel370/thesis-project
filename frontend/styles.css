@@ -90,6 +90,46 @@ body {
     font-weight: 400;
 }
 
+.navbar-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.navbar-user {
+    display: none;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.85rem;
+}
+
+.navbar-user-label {
+    color: var(--text-secondary);
+    font-family: 'Roboto Mono', monospace;
+}
+
+.navbar-user-label strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.btn-logout {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-family: 'Roboto Mono', monospace;
+    padding: 0.2rem 0.6rem;
+    transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.btn-logout:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 /* Theme Toggle */
 .theme-toggle {
     position: relative;

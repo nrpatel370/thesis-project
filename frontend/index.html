@@ -15,9 +15,15 @@
             <div class="navbar-brand">
                 Grade Normalizer
             </div>
-            <div class="theme-toggle" id="themeToggle">
-                <div class="theme-toggle-slider">
-                    <img src="./assets/lightmode.png" alt="Light mode" id="themeIcon">
+            <div class="navbar-right">
+                <div class="navbar-user" id="navbarUser">
+                    <span class="navbar-user-label" id="navbarUserLabel"></span>
+                    <button class="btn-logout" id="logoutBtn" type="button">Sign Out</button>
+                </div>
+                <div class="theme-toggle" id="themeToggle">
+                    <div class="theme-toggle-slider">
+                        <img src="./assets/lightmode.png" alt="Light mode" id="themeIcon">
+                    </div>
                 </div>
             </div>
         </div>
@@ -44,7 +50,7 @@
                 </div>
                 <div class="action-row" style="margin-top:0;">
                     <button class="btn btn-primary" id="submitCrn" type="button">
-                        Register/Login with CRN
+                        Register with CRN
                     </button>
                     <button class="btn btn-secondary" id="continueAsGuest" type="button">
                         Continue as Guest

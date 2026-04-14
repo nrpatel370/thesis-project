@@ -25,6 +25,78 @@
 import { API_URL, CATEGORY_LABELS } from "./js/constants.js";
 import { capitalize, showMessage } from "./js/helpers.js";
 
+// Populate and show the navbar user label + Sign Out button
+function showNavbarUser() {
+    const navbarUser  = document.getElementById('navbarUser');
+    const navbarLabel = document.getElementById('navbarUserLabel');
+    if (!navbarUser || !navbarLabel) return;
+
+    navbarLabel.innerHTML = isGuestMode
+        ? '<strong>Guest</strong>'
+        : `CRN: <strong>${currentUserId}</strong>`;
+
+    navbarUser.style.display = 'flex';
+}
+
+// Reset the entire app back to the initial CRN-entry state
+function logout() {
+    currentUserId          = 'guest';
+    isGuestMode            = false;
+    userCategories         = null;
+    latestCategorizedColumns = {};
+    savedPreferenceState   = null;
+    formulaConfig          = null;
+    sessionStorage.removeItem('selectionsPanelCollapsed');
+
+    document.getElementById('selectionsPanel')?.remove();
+    document.getElementById('resultsPanel')?.remove();
+    document.getElementById('debugPanel')?.remove();
+
+    const csvFileInput   = document.getElementById('csvFile');
+    const fileLabel      = document.getElementById('fileLabel');
+    const fileName       = document.getElementById('fileName');
+    const processFileBtn = document.getElementById('processFile');
+    const uploadMessage  = document.getElementById('uploadMessage');
+    if (csvFileInput)   csvFileInput.value = '';
+    if (fileLabel)      { fileLabel.classList.remove('has-file'); fileLabel.style.borderColor = ''; }
+    if (fileName)       fileName.textContent = 'Choose CSV file or drag here';
+    if (processFileBtn) { processFileBtn.disabled = true; processFileBtn.textContent = 'Process & Normalize Grades'; }
+    if (uploadMessage)  uploadMessage.innerHTML = '';
+
+    FORMULA_FIELDS.forEach(({ id }) => {
+        const input = document.getElementById(id);
+        if (input) input.value = '';
+    });
+    const formulaMessage = document.getElementById('formulaMessage');
+    if (formulaMessage) formulaMessage.innerHTML = '';
+    const formulaEditor = document.getElementById('formulaEditor');
+    if (formulaEditor)  { formulaEditor.style.display = 'none'; document.getElementById('toggleFormulaText').textContent = 'Show'; }
+
+   
+    const categoryEditor = document.getElementById('categoryEditor');
+    if (categoryEditor) { categoryEditor.style.display = 'none'; document.getElementById('toggleText').textContent = 'Show'; }
+    const categoryMessage = document.getElementById('categoryMessage');
+    if (categoryMessage) categoryMessage.innerHTML = '';
+
+    uploadSection.classList.remove('active');
+    const guestBanner = document.getElementById('guestBanner');
+    if (guestBanner) guestBanner.style.display = 'none';
+
+    crnInput.value    = '';
+    crnInput.disabled = false;
+    submitCrnBtn.disabled = false;
+    document.getElementById('continueAsGuest').disabled = false;
+    crnMessage.innerHTML = '';
+    
+    const navbarUser = document.getElementById('navbarUser');
+    if (navbarUser) navbarUser.style.display = 'none';
+
+    // Scroll back to the top of the page.
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.getElementById('logoutBtn').addEventListener('click', logout);
+
 // ─── Theme toggle ────────────────────────────────────────────────────────────
 const themeToggle = document.getElementById('themeToggle');
 const themeIcon = document.getElementById('themeIcon');
@@ -93,6 +165,7 @@ submitCrnBtn.addEventListener('click', async () => {
         crnInput.disabled     = true;
         submitCrnBtn.disabled = true;
         document.getElementById('continueAsGuest').disabled = true;
+        showNavbarUser();
     }, 500);
 });
 
@@ -108,6 +181,7 @@ document.getElementById('continueAsGuest').addEventListener('click', () => {
     crnInput.disabled     = true;
     submitCrnBtn.disabled = true;
     document.getElementById('continueAsGuest').disabled = true;
+    showNavbarUser();
 });
  
 crnInput.addEventListener('keypress', (e) => {
