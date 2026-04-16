@@ -21,9 +21,9 @@ Canvas exports gradebooks with raw per-assignment scores scattered across dozens
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Backend | Python 3, Flask, pandas, SQLite |
+| Layer    | Technology                                 |
+| -------- | ------------------------------------------ |
+| Backend  | Python 3, Flask, pandas, SQLite            |
 | Frontend | Vanilla JavaScript (ES modules), HTML, CSS |
 
 No build step is required. The frontend is served as static files and communicates with the Flask API over HTTP.
@@ -44,7 +44,7 @@ No build step is required. The frontend is served as static files and communicat
 │
 ├── frontend/
 │   ├── index.html
-│   ├── script.js           # Main frontend logic 
+│   ├── script.js           # Main frontend logic
 │   ├── styles.css
 │   └── js/
 │       ├── constants.js    # API URL, CRN, category labels
@@ -52,7 +52,7 @@ No build step is required. The frontend is served as static files and communicat
 │
 ├── example.csv             # Sample Canvas gradebook export for testing
 │
-└── requirements.txt        # Txt file containg all installed external libraries  
+└── requirements.txt        # Txt file containg all installed external libraries
 ```
 
 ---
@@ -97,24 +97,26 @@ Then navigate to `http://localhost:8080`.
 
 ### 1. Choose your mode
 
-**CRN mode:** Type any 5–6 digit Course Reference Number and press **Verify CRN**. Previously saved column preferences and formula weights for that CRN are loaded automatically.
+**Register:** Enter any 5-6 digit CRN and click **Register** to create a new profile. If the CRN already has saved data you'll see an informational notice and be logged in automatically.
 
-**Guest mode:** Click **Continue as Guest** to skip CRN entry. The full tool is available but nothing will be saved (preferences, formula changes, and category edits apply for the current session only).
+**Login:** Enter an existing CRN and click **Login** to load your saved preferences, formula weights, and categories. If the CRN has no saved data yet you'll be notified and a fresh profile will be created.
+
+**Guest mode:** Click **Continue as Guest** to skip CRN entry entirely. The full tool is available but nothing will be saved - preferences, formula changes, and category edits apply for the current session only.
 
 ### 2. (Optional) Configure formula weights
 
 Expand **Configure Formula Weights** to adjust any of the eight normalization parameters. Leave a field blank to use the server-side default. Click **Save Formula** to persist, or **Reset to Defaults** to clear all overrides.
 
-| Field | Default | Description |
-|---|---|---|
-| Lab weight | 40 | Weight applied to the labs component |
-| Debug Dungeon weight | 60 | Weight applied to the Debug Dungeon component |
-| Lab score multiplier | 5.3 | Scales the combined lab+DD component |
-| Lab total points | 530 | Denominator used as the Lab column ceiling |
-| Attendance multiplier | 1.2 | Applied to raw attendance scores |
-| Attendance total points | 120 | Denominator used as the Attendance column ceiling |
-| Lab max points (fallback) | 300 | Fallback denominator if Points Possible row is absent |
-| DD max points (fallback) | 230 | Fallback denominator if Points Possible row is absent |
+| Field                     | Default | Description                                           |
+| ------------------------- | ------- | ----------------------------------------------------- |
+| Lab weight                | 40      | Weight applied to the labs component                  |
+| Debug Dungeon weight      | 60      | Weight applied to the Debug Dungeon component         |
+| Lab score multiplier      | 5.3     | Scales the combined lab+DD component                  |
+| Lab total points          | 530     | Denominator used as the Lab column ceiling            |
+| Attendance multiplier     | 1.2     | Applied to raw attendance scores                      |
+| Attendance total points   | 120     | Denominator used as the Attendance column ceiling     |
+| Lab max points (fallback) | 300     | Fallback denominator if Points Possible row is absent |
+| DD max points (fallback)  | 230     | Fallback denominator if Points Possible row is absent |
 
 ### 3. Upload a Canvas CSV
 
@@ -163,18 +165,18 @@ Denominators are read dynamically from the Canvas "Points Possible" row, falling
 
 ## API Endpoints
 
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/upload` | Parse a Canvas CSV and return categorized columns |
-| `POST` | `/normalize` | Run normalization, return result table |
-| `POST` | `/normalize/debug` | Run normalization with debug payload |
-| `GET` | `/categories/defaults` | Return built-in category keyword map |
-| `GET` | `/categories/<user_id>` | Return saved (or default) categories for a CRN |
-| `POST` | `/categories` | Save custom categories for a CRN |
-| `GET` | `/preferences/<user_id>` | Return saved column preferences for a CRN |
-| `POST` | `/save-preferences` | Persist column preferences for a CRN |
-| `GET` | `/config/<user_id>` | Return saved (or default) formula weights for a CRN |
-| `POST` | `/config` | Save custom formula weights for a CRN |
+| Method | Path                     | Description                                         |
+| ------ | ------------------------ | --------------------------------------------------- |
+| `POST` | `/upload`                | Parse a Canvas CSV and return categorized columns   |
+| `POST` | `/normalize`             | Run normalization, return result table              |
+| `POST` | `/normalize/debug`       | Run normalization with debug payload                |
+| `GET`  | `/categories/defaults`   | Return built-in category keyword map                |
+| `GET`  | `/categories/<user_id>`  | Return saved (or default) categories for a CRN      |
+| `POST` | `/categories`            | Save custom categories for a CRN                    |
+| `GET`  | `/preferences/<user_id>` | Return saved column preferences for a CRN           |
+| `POST` | `/save-preferences`      | Persist column preferences for a CRN                |
+| `GET`  | `/config/<user_id>`      | Return saved (or default) formula weights for a CRN |
+| `POST` | `/config`                | Save custom formula weights for a CRN               |
 
 ---
 
@@ -182,11 +184,11 @@ Denominators are read dynamically from the Canvas "Points Possible" row, falling
 
 SQLite database stored at `backend/grades.db`.
 
-| Table | Purpose |
-|---|---|
-| `uploaded_csvs` | Stores the most recent CSV upload per CRN |
-| `user_preferences` | Stores saved column-selection preferences per CRN |
-| `user_categories` | Stores custom keyword-to-category mappings per CRN |
-| `course_config` | Stores custom formula weights per CRN |
+| Table              | Purpose                                            |
+| ------------------ | -------------------------------------------------- |
+| `uploaded_csvs`    | Stores the most recent CSV upload per CRN          |
+| `user_preferences` | Stores saved column-selection preferences per CRN  |
+| `user_categories`  | Stores custom keyword-to-category mappings per CRN |
+| `course_config`    | Stores custom formula weights per CRN              |
 
 Only the latest CSV upload is kept per CRN (older rows are pruned automatically on each new upload to prevent unbounded growth).

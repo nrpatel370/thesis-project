@@ -12,6 +12,7 @@ Endpoints:
   POST /save-preferences      — persist column-selection preferences for a CRN
   GET  /config/<user_id>      — return the saved (or default) formula weights for a CRN
   POST /config                — save custom formula weights for a CRN
+  GET  /exists/<user_id>      — check whether a CRN has any saved data
 
 All endpoints include CORS headers so the static frontend can reach the API
 from a different origin during local development.
@@ -111,6 +112,7 @@ def add_cors_headers(response):
 @app.route("/normalize/debug", methods=["OPTIONS"])
 @app.route("/config", methods=["OPTIONS"])
 @app.route("/config/<user_id>", methods=["OPTIONS"])
+@app.route("/exists/<user_id>", methods=["OPTIONS"])
 def handle_preflight(user_id=None):
     return jsonify({"status": "ok"}), 200
 
@@ -431,6 +433,34 @@ def save_formula_config():
                 )
             conn.commit()
         return jsonify({"message": "Formula config saved", "user_id": user_id, "config": config}), 200
+    except Exception as error:
+        return json_error(f"Database error: {error}", 500)
+
+
+@app.route("/exists/<user_id>", methods=["GET"])
+def check_user_exists(user_id):
+    """Return {"exists": true} if the CRN has any saved data, false otherwise.
+
+    Used by the frontend Register/Login buttons to show the appropriate
+    contextual message before entering the app.
+    """
+    try:
+        user_id = str(user_id).strip()
+        with get_db() as conn:
+            # A CRN is considered "registered" if it has at least one row in
+            # any of the three per-user tables
+            row = conn.execute(
+                """
+                SELECT 1 FROM user_preferences WHERE user_id = ?
+                UNION ALL
+                SELECT 1 FROM user_categories   WHERE user_id = ?
+                UNION ALL
+                SELECT 1 FROM course_config      WHERE user_id = ?
+                LIMIT 1
+                """,
+                (user_id, user_id, user_id),
+            ).fetchone()
+        return jsonify({"exists": row is not None}), 200
     except Exception as error:
         return json_error(f"Database error: {error}", 500)
 
