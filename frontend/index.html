@@ -1,190 +1,459 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Grade Normalizer</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
     <nav class="navbar">
-        <div class="navbar-content">
-            <div class="navbar-brand">
-                Grade Normalizer
+      <div class="navbar-content">
+        <div class="navbar-brand">Grade Normalizer</div>
+        <nav class="navbar-nav">
+          <a href="index.html" class="navbar-link active">App</a>
+          <a href="about.html" class="navbar-link">About</a>
+        </nav>
+        <div class="navbar-right">
+          <div class="navbar-user" id="navbarUser">
+            <span class="navbar-user-label" id="navbarUserLabel"></span>
+            <button class="btn-logout" id="logoutBtn" type="button">
+              Sign Out
+            </button>
+          </div>
+          <div class="theme-toggle" id="themeToggle">
+            <div class="theme-toggle-slider">
+              <img
+                src="./assets/lightmode.png"
+                alt="Light mode"
+                id="themeIcon"
+              />
             </div>
-            <div class="navbar-right">
-                <div class="navbar-user" id="navbarUser">
-                    <span class="navbar-user-label" id="navbarUserLabel"></span>
-                    <button class="btn-logout" id="logoutBtn" type="button">Sign Out</button>
-                </div>
-                <div class="theme-toggle" id="themeToggle">
-                    <div class="theme-toggle-slider">
-                        <img src="./assets/lightmode.png" alt="Light mode" id="themeIcon">
-                    </div>
-                </div>
-            </div>
+          </div>
         </div>
+      </div>
     </nav>
 
-    <div class="container">
+    <div class="page-layout">
+      <!-- ── Left guide panel ─────────────────────────────────────────── -->
+      <aside class="guide-panel guide-panel--left">
+        <p class="guide-panel-title">Quick Start</p>
+
+        <div class="guide-step">
+          <div class="guide-step-header">
+            <span class="guide-step-number">1</span>
+            <h3 class="guide-step-title">Sign In</h3>
+          </div>
+          <p class="guide-step-body">
+            <strong>Register</strong> to create a new CRN profile,
+            <strong>Login</strong> to load a saved one, or
+            <strong>Continue as Guest</strong> to use the tool without saving
+            anything.
+          </p>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-header">
+            <span class="guide-step-number">4</span>
+            <h3 class="guide-step-title">Upload CSV</h3>
+          </div>
+          <p class="guide-step-body">
+            Export your Canvas gradebook as a CSV file and drag it into the
+            upload area or click to browse.
+          </p>
+        </div>
+      </aside>
+
+      <div class="container">
         <div class="header">
-            <h1>Student Grade Normalization</h1>
-            <p>Enter your CRN to load saved settings, or continue as a guest</p>
+          <h1>Student Grade Normalization</h1>
+          <p>Enter your CRN to load saved settings, or continue as a guest</p>
         </div>
 
         <div class="card">
-            <div id="crnSection">
-                <div class="form-group">
-                    <label class="form-label" for="crnInput">Course Reference Number (CRN)</label>
-                    <input 
-                        type="text" 
-                        id="crnInput" 
-                        class="form-input" 
-                        placeholder="Enter 5-6 digit CRN"
-                        maxlength="6"
-                        pattern="[0-9]*"
+          <div id="crnSection">
+            <div class="form-group">
+              <label class="form-label" for="crnInput"
+                >Course Reference Number (CRN)</label
+              >
+              <input
+                type="text"
+                id="crnInput"
+                class="form-input"
+                placeholder="Enter 5-6 digit CRN"
+                maxlength="6"
+                pattern="[0-9]*"
+              />
+            </div>
+            <div class="action-row" style="margin-top: 0">
+              <button class="btn btn-primary" id="registerCrn" type="button">
+                Register
+              </button>
+              <button class="btn btn-secondary" id="loginCrn" type="button">
+                Login
+              </button>
+            </div>
+            <div class="crn-or-divider">or</div>
+            <button
+              class="btn btn-secondary"
+              id="continueAsGuest"
+              type="button"
+            >
+              Continue as Guest
+            </button>
+            <div id="crnMessage"></div>
+          </div>
+
+          <div class="upload-section" id="uploadSection">
+            <!-- Shown only in guest mode -->
+            <div
+              id="guestBanner"
+              style="
+                display: none;
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                padding: 0.65rem 1rem;
+                margin-bottom: 1.25rem;
+                display: none;
+                align-items: center;
+                gap: 0.75rem;
+                margin-top: 15px;
+              "
+            >
+              <span style="font-weight: 600; font-size: 0.9rem"
+                >Guest Mode</span
+              >
+              <span style="font-size: 0.85rem; color: var(--text-secondary)"
+                >Your preferences, categories, and formula settings will not be
+                saved.</span
+              >
+            </div>
+
+            <div id="categoryConfig">
+              <div class="form-group">
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                  "
+                >
+                  <label class="form-label"
+                    >Configure Categories (Optional)</label
+                  >
+                  <button class="btn-link" id="toggleCategories" type="button">
+                    <span id="toggleText">Show</span> ▼
+                  </button>
+                </div>
+                <p
+                  style="
+                    color: var(--text-secondary);
+                    font-size: 0.9rem;
+                    margin-top: 0.5rem;
+                  "
+                >
+                  Customize how your CSV columns are categorized
+                </p>
+                <p class="hint">
+                  Keywords are case-insensitive and matched anywhere in column
+                  names
+                </p>
+              </div>
+
+              <div id="categoryEditor" style="display: none">
+                <div id="categoryList"></div>
+                <button
+                  class="btn-secondary"
+                  id="addCategory"
+                  style="margin-top: 1rem"
+                  type="button"
+                >
+                  + Add Custom Category
+                </button>
+                <button
+                  class="btn btn-primary"
+                  id="saveCategories"
+                  style="margin-top: 1rem"
+                  type="button"
+                >
+                  Save Categories
+                </button>
+                <div id="categoryMessage"></div>
+              </div>
+            </div>
+
+            <div id="formulaConfig">
+              <div class="form-group">
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                  "
+                >
+                  <label class="form-label"
+                    >Configure Formula Weights (Optional)</label
+                  >
+                  <button class="btn-link" id="toggleFormula" type="button">
+                    <span id="toggleFormulaText">Show</span> ▼
+                  </button>
+                </div>
+                <p
+                  style="
+                    color: var(--text-secondary);
+                    font-size: 0.9rem;
+                    margin-top: 0.5rem;
+                  "
+                >
+                  Customize grade calculation weights for your course. Leave any
+                  field blank to use the default value.
+                </p>
+              </div>
+              <div id="formulaEditor" style="display: none">
+                <div class="column-choice-grid">
+                  <div class="column-choice">
+                    <label class="form-label" for="inputLabWeight"
+                      >Lab weight</label
                     >
+                    <input
+                      type="number"
+                      id="inputLabWeight"
+                      class="form-input"
+                      placeholder="Default: 40"
+                      min="0"
+                      step="any"
+                    />
+                    <p class="hint">
+                      Portion of the combined score attributed to lab
+                      assignments.
+                    </p>
+                  </div>
+                  <div class="column-choice">
+                    <label class="form-label" for="inputDdWeight"
+                      >Debug Dungeon weight</label
+                    >
+                    <input
+                      type="number"
+                      id="inputDdWeight"
+                      class="form-input"
+                      placeholder="Default: 60"
+                      min="0"
+                      step="any"
+                    />
+                    <p class="hint">
+                      Portion of the combined score attributed to Debug Dungeon.
+                    </p>
+                  </div>
+                  <div class="column-choice">
+                    <label class="form-label" for="inputLabScale"
+                      >Lab score multiplier</label
+                    >
+                    <input
+                      type="number"
+                      id="inputLabScale"
+                      class="form-input"
+                      placeholder="Default: 5.3"
+                      min="0"
+                      step="any"
+                    />
+                    <p class="hint">
+                      Scales the combined Lab + DD score to the final Lab
+                      output. (Lab weight + DD weight) × multiplier = Lab total
+                      points.
+                    </p>
+                  </div>
+                  <div class="column-choice">
+                    <label class="form-label" for="inputLabTotalPoints"
+                      >Lab total points</label
+                    >
+                    <input
+                      type="number"
+                      id="inputLabTotalPoints"
+                      class="form-input"
+                      placeholder="Default: 530"
+                      min="0"
+                      step="any"
+                    />
+                    <p class="hint">
+                      Maximum possible Lab score displayed in the output. Should
+                      equal (Lab weight + DD weight) × Lab score multiplier.
+                    </p>
+                  </div>
+                  <div class="column-choice">
+                    <label class="form-label" for="inputAttendanceMult"
+                      >Attendance multiplier</label
+                    >
+                    <input
+                      type="number"
+                      id="inputAttendanceMult"
+                      class="form-input"
+                      placeholder="Default: 1.2"
+                      min="0"
+                      step="any"
+                    />
+                    <p class="hint">
+                      Scales the raw attendance score to the final Attendance
+                      output. Not applied when column is named "Attendance
+                      Total".
+                    </p>
+                  </div>
+                  <div class="column-choice">
+                    <label class="form-label" for="inputAttendanceTotalPoints"
+                      >Attendance total points</label
+                    >
+                    <input
+                      type="number"
+                      id="inputAttendanceTotalPoints"
+                      class="form-input"
+                      placeholder="Default: 120"
+                      min="0"
+                      step="any"
+                    />
+                    <p class="hint">
+                      Maximum possible Attendance score displayed in the output.
+                    </p>
+                  </div>
+                  <div class="column-choice">
+                    <label class="form-label" for="inputLabDenomFallback"
+                      >Lab max points (fallback)</label
+                    >
+                    <input
+                      type="number"
+                      id="inputLabDenomFallback"
+                      class="form-input"
+                      placeholder="Default: 300"
+                      min="0"
+                      step="any"
+                    />
+                    <p class="hint">
+                      Used as the lab denominator only when the CSV has no
+                      "Points Possible" row.
+                    </p>
+                  </div>
+                  <div class="column-choice">
+                    <label class="form-label" for="inputDdDenomFallback"
+                      >Debug Dungeon max points (fallback)</label
+                    >
+                    <input
+                      type="number"
+                      id="inputDdDenomFallback"
+                      class="form-input"
+                      placeholder="Default: 230"
+                      min="0"
+                      step="any"
+                    />
+                    <p class="hint">
+                      Used as the DD denominator only when the CSV has no
+                      "Points Possible" row.
+                    </p>
+                  </div>
                 </div>
-                <div class="action-row" style="margin-top:0;">
-                    <button class="btn btn-primary" id="registerCrn" type="button">
-                        Register
-                    </button>
-                    <button class="btn btn-secondary" id="loginCrn" type="button">
-                        Login
-                    </button>
+                <div class="action-row" style="margin-top: 1rem">
+                  <button
+                    class="btn btn-primary"
+                    id="saveFormula"
+                    type="button"
+                  >
+                    Save Formula
+                  </button>
+                  <button
+                    class="btn btn-secondary"
+                    id="resetFormula"
+                    type="button"
+                  >
+                    Reset to Defaults
+                  </button>
                 </div>
-                <div class="crn-or-divider">or</div>
-                <button class="btn btn-secondary" id="continueAsGuest" type="button">
-                    Continue as Guest
-                </button>
-                <div id="crnMessage"></div>
+                <div id="formulaMessage"></div>
+              </div>
             </div>
 
-            <div class="upload-section" id="uploadSection">
-                <!-- Shown only in guest mode -->
-                <div id="guestBanner" style="display:none;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;padding:0.65rem 1rem;margin-bottom:1.25rem;display:none;align-items:center;gap:0.75rem; margin-top: 15px;">
-                    <span style="font-weight:600;font-size:0.9rem;">Guest Mode</span>
-                    <span style="font-size:0.85rem;color:var(--text-secondary);">Your preferences, categories, and formula settings will not be saved.</span>
-                </div>
-
-                <div id="categoryConfig">
-                    <div class="form-group">
-                        <div style="display:flex;justify-content:space-between;align-items:center;">
-                            <label class="form-label">Configure Categories (Optional)</label>
-                            <button class="btn-link" id="toggleCategories" type="button">
-                                <span id="toggleText">Show</span> ▼
-                            </button>
-                        </div>
-                        <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.5rem;">
-                            Customize how your CSV columns are categorized
-                        </p>
-                        <p class="hint">Keywords are case-insensitive and matched anywhere in column names</p>
-                    </div>
-                    
-                    <div id="categoryEditor" style="display:none;">
-                        <div id="categoryList"></div>
-                        <button class="btn-secondary" id="addCategory" style="margin-top:1rem;" type="button">
-                            + Add Custom Category
-                        </button>
-                        <button class="btn btn-primary" id="saveCategories" style="margin-top:1rem;" type="button">
-                            Save Categories
-                        </button>
-                        <div id="categoryMessage"></div>
-                    </div>
-                </div>
-                
-                <div id="formulaConfig">
-                    <div class="form-group">
-                        <div style="display:flex;justify-content:space-between;align-items:center;">
-                            <label class="form-label">Configure Formula Weights (Optional)</label>
-                            <button class="btn-link" id="toggleFormula" type="button">
-                                <span id="toggleFormulaText">Show</span> ▼
-                            </button>
-                        </div>
-                        <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.5rem;">
-                            Customize grade calculation weights for your course. Leave any field blank to use the default value.
-                        </p>
-                    </div>
-                    <div id="formulaEditor" style="display:none;">
-                        <div class="column-choice-grid">
-                            <div class="column-choice">
-                                <label class="form-label" for="inputLabWeight">Lab weight</label>
-                                <input type="number" id="inputLabWeight" class="form-input" placeholder="Default: 40" min="0" step="any">
-                                <p class="hint">Portion of the combined score attributed to lab assignments.</p>
-                            </div>
-                            <div class="column-choice">
-                                <label class="form-label" for="inputDdWeight">Debug Dungeon weight</label>
-                                <input type="number" id="inputDdWeight" class="form-input" placeholder="Default: 60" min="0" step="any">
-                                <p class="hint">Portion of the combined score attributed to Debug Dungeon.</p>
-                            </div>
-                            <div class="column-choice">
-                                <label class="form-label" for="inputLabScale">Lab score multiplier</label>
-                                <input type="number" id="inputLabScale" class="form-input" placeholder="Default: 5.3" min="0" step="any">
-                                <p class="hint">Scales the combined Lab + DD score to the final Lab output. (Lab weight + DD weight) × multiplier = Lab total points.</p>
-                            </div>
-                            <div class="column-choice">
-                                <label class="form-label" for="inputLabTotalPoints">Lab total points</label>
-                                <input type="number" id="inputLabTotalPoints" class="form-input" placeholder="Default: 530" min="0" step="any">
-                                <p class="hint">Maximum possible Lab score displayed in the output. Should equal (Lab weight + DD weight) × Lab score multiplier.</p>
-                            </div>
-                            <div class="column-choice">
-                                <label class="form-label" for="inputAttendanceMult">Attendance multiplier</label>
-                                <input type="number" id="inputAttendanceMult" class="form-input" placeholder="Default: 1.2" min="0" step="any">
-                                <p class="hint">Scales the raw attendance score to the final Attendance output. Not applied when column is named "Attendance Total".</p>
-                            </div>
-                            <div class="column-choice">
-                                <label class="form-label" for="inputAttendanceTotalPoints">Attendance total points</label>
-                                <input type="number" id="inputAttendanceTotalPoints" class="form-input" placeholder="Default: 120" min="0" step="any">
-                                <p class="hint">Maximum possible Attendance score displayed in the output.</p>
-                            </div>
-                            <div class="column-choice">
-                                <label class="form-label" for="inputLabDenomFallback">Lab max points (fallback)</label>
-                                <input type="number" id="inputLabDenomFallback" class="form-input" placeholder="Default: 300" min="0" step="any">
-                                <p class="hint">Used as the lab denominator only when the CSV has no "Points Possible" row.</p>
-                            </div>
-                            <div class="column-choice">
-                                <label class="form-label" for="inputDdDenomFallback">Debug Dungeon max points (fallback)</label>
-                                <input type="number" id="inputDdDenomFallback" class="form-input" placeholder="Default: 230" min="0" step="any">
-                                <p class="hint">Used as the DD denominator only when the CSV has no "Points Possible" row.</p>
-                            </div>
-                        </div>
-                        <div class="action-row" style="margin-top:1rem;">
-                            <button class="btn btn-primary" id="saveFormula" type="button">
-                                Save Formula
-                            </button>
-                            <button class="btn btn-secondary" id="resetFormula" type="button">
-                                Reset to Defaults
-                            </button>
-                        </div>
-                        <div id="formulaMessage"></div>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Upload Student Grades (CSV)</label>
-                    <div class="file-upload-wrapper">
-                        <input 
-                            type="file" 
-                            id="csvFile" 
-                            class="file-upload-input"
-                            accept=".csv"
-                        >
-                        <label for="csvFile" class="file-upload-label" id="fileLabel">
-                            <span id="fileName">Choose CSV file or drag here</span>
-                        </label>
-                    </div>
-                </div>
-
-                <button class="btn btn-primary" id="processFile" disabled type="button">
-                    Process & Normalize Grades
-                </button>
-                <div id="uploadMessage"></div>
+            <div class="form-group">
+              <label class="form-label">Upload Student Grades (CSV)</label>
+              <div class="file-upload-wrapper">
+                <input
+                  type="file"
+                  id="csvFile"
+                  class="file-upload-input"
+                  accept=".csv"
+                />
+                <label for="csvFile" class="file-upload-label" id="fileLabel">
+                  <span id="fileName">Choose CSV file or drag here</span>
+                </label>
+              </div>
             </div>
+
+            <button
+              class="btn btn-primary"
+              id="processFile"
+              disabled
+              type="button"
+            >
+              Process & Normalize Grades
+            </button>
+            <div id="uploadMessage"></div>
+          </div>
         </div>
+      </div>
+      <!-- /.container -->
+
+      <aside class="guide-panel guide-panel--right">
+        <p class="guide-panel-title">Configuration</p>
+
+        <div class="guide-step">
+          <div class="guide-step-header">
+            <span class="guide-step-number">2</span>
+            <h3 class="guide-step-title">
+              Categories
+              <span class="guide-step-optional">optional</span>
+            </h3>
+          </div>
+          <p class="guide-step-body">
+            Customize how column names are matched into grade buckets. Each
+            keyword is matched case-insensitively anywhere in the column name.
+            Defaults cover most standard Canvas exports. (Main categories used
+            are Labs, Debug Dungeon, Attendance and Final Exam)
+          </p>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-header">
+            <span class="guide-step-number">3</span>
+            <h3 class="guide-step-title">
+              Formula Weights
+              <span class="guide-step-optional">optional</span>
+            </h3>
+          </div>
+          <p class="guide-step-body">
+            Adjust the 8 calculation weights for your course: lab weight, Debug
+            Dungeon weight, multipliers &amp; fallback denominators. Any field
+            left blank uses the built-in default.
+          </p>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-header">
+            <span class="guide-step-number">5</span>
+            <h3 class="guide-step-title">Column Selection</h3>
+          </div>
+          <p class="guide-step-body">
+            After uploading, review the auto-categorized columns. Check the
+            <strong>Labs</strong> and <strong>Debug Dungeon</strong> columns to
+            include, then pick <strong>Attendance</strong> and
+            <strong>Final Exam</strong> from the dropdowns. Click
+            <strong>Save &amp; Calculate</strong> when ready.
+          </p>
+        </div>
+      </aside>
     </div>
+    <!-- /.page-layout -->
     <script type="module" src="script.js"></script>
-</body>
+  </body>
 </html>

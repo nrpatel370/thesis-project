@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <!-- Apply saved theme before render to avoid flash -->
+    <script>
+      const t = localStorage.getItem("theme") || "light";
+      document.documentElement.setAttribute("data-theme", t);
+    </script>
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="navbar-content">
+        <div class="navbar-brand">Grade Normalizer</div>
+        <nav class="navbar-nav">
+          <a href="index.html" class="navbar-link">App</a>
+          <a href="about.html" class="navbar-link active">About</a>
+        </nav>
+        <div class="navbar-right">
+          <div class="theme-toggle" id="themeToggle">
+            <div class="theme-toggle-slider">
+              <img
+                src="./assets/lightmode.png"
+                alt="Light mode"
+                id="themeIcon"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <div class="about-container">
+      <div class="about-hero">
+        <h1>About Grade Normalizer</h1>
+      </div>
+
+      <div class="card about-section">
+        <h2>Video Walkthrough</h2>
+
+        <div class="video-wrapper">
+          <video controls>
+            <source src="./assets/demo_video.mp4" type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
+        </div>
+
+        <p>
+          The walkthrough covers the full workflow: From signing in with your
+          CRN and uploading a Canvas CSV, to reviewing column selections and
+          downloading the normalized grade output.
+        </p>
+      </div>
+
+      <div class="card about-section">
+        <h2>How It Works</h2>
+        <p>
+          Grade Normalizer takes a raw Canvas gradebook export and produces four
+          normalized columns: <strong>Lab</strong>, <strong>Attendance</strong>,
+          <strong>Debug Dungeon</strong> and <strong>Final Exam 2</strong> which
+          are ready to paste into a grade sheet. The five step workflow is
+          designed to be fast for repeated use(s): preferences and formula
+          weights are saved per CRN so processing another CSV files requires no
+          reconfiguration.
+        </p>
+
+        <div class="about-steps">
+          <div class="guide-step">
+            <div class="guide-step-header">
+              <span class="guide-step-number">1</span>
+              <h3 class="guide-step-title">Sign In</h3>
+            </div>
+            <p class="guide-step-body">
+              <strong>Register</strong> a new CRN profile,
+              <strong>Login</strong> to an existing one, or
+              <strong>Continue as Guest</strong> for one time use without saving
+              anything.
+            </p>
+          </div>
+
+          <div class="guide-step">
+            <div class="guide-step-header">
+              <span class="guide-step-number">2</span>
+              <h3 class="guide-step-title">
+                Configure Categories
+                <span class="guide-step-optional">optional</span>
+              </h3>
+            </div>
+            <p class="guide-step-body">
+              Customize the keyword rules used to assign CSV columns to grade
+              buckets. Built-in defaults cover most standard Canvas naming
+              conventions and are saved per CRN.
+            </p>
+          </div>
+
+          <div class="guide-step">
+            <div class="guide-step-header">
+              <span class="guide-step-number">3</span>
+              <h3 class="guide-step-title">
+                Set Formula Weights
+                <span class="guide-step-optional">optional</span>
+              </h3>
+            </div>
+            <p class="guide-step-body">
+              Adjust the 8 calculation weights for your course: lab weight,
+              Debug Dungeon weight, multipliers, and fallback denominators. Any
+              field left blank falls back to the built-in default(s). See below
+              picture for more information on how these are factored in.
+            </p>
+          </div>
+
+          <div class="guide-step">
+            <div class="guide-step-header">
+              <span class="guide-step-number">4</span>
+              <h3 class="guide-step-title">Upload CSV</h3>
+            </div>
+            <p class="guide-step-body">
+              Export your gradebook from Canvas and convert it into a CSV file,
+              then drag the .csv file into the upload area or click to browse.
+            </p>
+          </div>
+
+          <div class="guide-step">
+            <div class="guide-step-header">
+              <span class="guide-step-number">5</span>
+              <h3 class="guide-step-title">Select Columns &amp; Calculate</h3>
+            </div>
+            <p class="guide-step-body">
+              Review the auto-categorized columns. Check the Labs and Debug
+              Dungeon columns, choose the Attendance and Final Exam columns from
+              the dropdowns, then click
+              <strong>Save &amp; Calculate Grades </strong> OR
+              <strong>Debug Normalize </strong> for more information on the
+              calculation.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card about-section">
+        <h2>The Normalization Formula</h2>
+        <p>
+          Denominators are read dynamically from the Canvas "Points Possible"
+          row and fall back to the configurable fallback values when that row is
+          absent. Below explains the Normalization formula we use:
+        </p>
+
+        <div class="formula-block">
+          <img id="formula-img" src="./assets/formula.png" />
+        </div>
+
+        <p>
+          <strong>Extra credit</strong> columns are placed in the Labs category
+          and added to the numerator. Because Canvas sets their Points Possible
+          to 0, they do not affect the denominator (scores can therefore exceed
+          100%, which is intentional).
+        </p>
+      </div>
+    </div>
+    <!-- /.about-container -->
+
+    <script>
+      // Theme toggle (minimal — no app state needed on this page)
+      const themeToggle = document.getElementById("themeToggle");
+      const themeIcon = document.getElementById("themeIcon");
+
+      const applyTheme = (theme) => {
+        document.documentElement.setAttribute("data-theme", theme);
+        themeIcon.src =
+          theme === "dark" ? "./assets/darkmode.png" : "./assets/lightmode.png";
+        themeIcon.alt = theme === "dark" ? "Dark mode" : "Light mode";
+      };
+
+      applyTheme(localStorage.getItem("theme") || "light");
+
+      themeToggle.addEventListener("click", () => {
+        const next =
+          document.documentElement.getAttribute("data-theme") === "light"
+            ? "dark"
+            : "light";
+        localStorage.setItem("theme", next);
+        applyTheme(next);
+      });
+    </script>
+  </body>
+</html>

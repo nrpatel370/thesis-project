@@ -1,0 +1,15 @@
+# Lab component
+lab_component = (Selected labs sum (student scores sum) / Total assignment points sum for selected labs) * lab_weight (default: 40)
+dd_component = (Selected DD labs (student scores sum) / Total assignment points sum for selected DD assignments) * dd_weight (default: 60)
+
+Both default weights should add up to 100
+
+Lab = (lab_component + dd_component) * lab_scale (default: 5.3 --> 530 pts)
+
+# Attendance
+Attendance --> Select a value from the Attendance category (dropdown value, only one value accepted)
+
+# Final Exam 2
+Final Exam 2 --> Select a value from the Final Exam category (dropdown value, only one value accepted)
+
+
