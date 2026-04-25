@@ -46,8 +46,10 @@ function logout() {
   latestCategorizedColumns = {};
   savedPreferenceState = null;
   formulaConfig = null;
-  processedResults = [];
-  currentFileName = "";
+  queuedFiles = [];
+  uploadedBatchId = null;
+  batchColumnPresence = {};
+  batchFileCount = 0;
   sessionStorage.removeItem("selectionsPanelCollapsed");
 
   document.getElementById("selectionsPanel")?.remove();
@@ -64,12 +66,18 @@ function logout() {
     fileLabel.classList.remove("has-file");
     fileLabel.style.borderColor = "";
   }
-  if (fileName) fileName.textContent = "Choose CSV file or drag here";
+  if (fileName)
+    fileName.textContent = "Choose CSV files or drag here (up to 5)";
   if (processFileBtn) {
     processFileBtn.disabled = true;
-    processFileBtn.textContent = "Process & Normalize Grades";
+    processFileBtn.textContent = "Process Files & Detect Columns";
   }
   if (uploadMessage) uploadMessage.innerHTML = "";
+  const fileQueue = document.getElementById("fileQueue");
+  if (fileQueue) {
+    fileQueue.style.display = "none";
+    fileQueue.innerHTML = "";
+  }
 
   FORMULA_FIELDS.forEach(({ id }) => {
     const input = document.getElementById(id);
@@ -110,7 +118,7 @@ function logout() {
 
 document.getElementById("logoutBtn").addEventListener("click", logout);
 
-// ─── Theme toggle ────────────────────────────────────────────────────────────
+// Theme toggle
 const themeToggle = document.getElementById("themeToggle");
 const themeIcon = document.getElementById("themeIcon");
 
@@ -131,7 +139,7 @@ themeToggle.addEventListener("click", () => {
   themeIcon.alt = newTheme === "dark" ? "Dark mode" : "Light mode";
 });
 
-// ─── CRN section — state and DOM refs ────────────────────────────────────────
+// CRN section - state and DOM refs
 const crnInput = document.getElementById("crnInput");
 const registerBtn = document.getElementById("registerCrn");
 const loginBtn = document.getElementById("loginCrn");
@@ -144,8 +152,10 @@ let userCategories = null; // custom or default category config
 let latestCategorizedColumns = {}; // most recent upload's column-to-category map
 let savedPreferenceState = null; // persists across CSV re-uploads (CRN mode only)
 let formulaConfig = null; // active formula weights for this CRN
-let processedResults = []; // accumulated normalized results across multiple CSV uploads (up to 5)
-let currentFileName = ""; // filename of the most recently selected CSV
+let queuedFiles = []; // File objects staged for upload, max 5
+let uploadedBatchId = null; // batch_id returned by /upload/multi, used in /normalize/multi
+let batchColumnPresence = {}; // {col: [file_indices]} - which files have each column
+let batchFileCount = 0; // number of files in the active batch
 
 // Maps each formula input's element ID to the backend config key and display label.
 // Used by save/populate/reset handlers to avoid duplicating field metadata.
@@ -234,7 +244,7 @@ async function activateCrnMode(crn) {
   showNavbarUser();
 }
 
-// ── Register ──────────────────────────────────────────────────────────────────
+// Register
 registerBtn.addEventListener("click", async () => {
   const crn = crnInput.value.trim();
   if (!validateCrnInput(crn)) return;
@@ -264,7 +274,7 @@ registerBtn.addEventListener("click", async () => {
   }
 });
 
-// ── Login ─────────────────────────────────────────────────────────────────────
+// Login
 loginBtn.addEventListener("click", async () => {
   const crn = crnInput.value.trim();
   if (!validateCrnInput(crn)) return;
@@ -298,7 +308,7 @@ loginBtn.addEventListener("click", async () => {
   }
 });
 
-// ── Continue as Guest ─────────────────────────────────────────────────────────
+// Continue as Guest
 document.getElementById("continueAsGuest").addEventListener("click", () => {
   isGuestMode = true;
   currentUserId = "guest";
@@ -312,8 +322,7 @@ document.getElementById("continueAsGuest").addEventListener("click", () => {
   showNavbarUser();
 });
 
-// ─── API data loaders ─────────────────────────────────────────────────────────
-
+// API data loaders
 async function loadUserCategories() {
   try {
     const response = await fetch(`${API_URL}/categories/${currentUserId}`);
@@ -386,8 +395,7 @@ async function loadSavedPreferences() {
   }
 }
 
-// ─── Category editor ──────────────────────────────────────────────────────────
-
+// Category editor
 document.getElementById("toggleCategories").addEventListener("click", () => {
   const editor = document.getElementById("categoryEditor");
   const toggleText = document.getElementById("toggleText");
@@ -514,7 +522,7 @@ document
         userCategories = categories;
         showMessage(
           document.getElementById("categoryMessage"),
-          "✓ Categories saved successfully!",
+          "Categories saved successfully!",
           "success",
         );
       } else {
@@ -523,7 +531,7 @@ document
     } catch (err) {
       showMessage(
         document.getElementById("categoryMessage"),
-        `✗ ${err.message}`,
+        `${err.message}`,
         "error",
       );
     } finally {
@@ -532,8 +540,7 @@ document
     }
   });
 
-// ─── Formula config editor ────────────────────────────────────────────────────
-
+// Formula config editor
 document.getElementById("toggleFormula").addEventListener("click", () => {
   const editor = document.getElementById("formulaEditor");
   const text = document.getElementById("toggleFormulaText");
@@ -598,13 +605,13 @@ document.getElementById("saveFormula").addEventListener("click", async () => {
     formulaConfig = data.config;
     showMessage(
       document.getElementById("formulaMessage"),
-      "✓ Formula saved successfully!",
+      "Formula saved successfully!",
       "success",
     );
   } catch (err) {
     showMessage(
       document.getElementById("formulaMessage"),
-      `✗ ${err.message}`,
+      `${err.message}`,
       "error",
     );
   } finally {
@@ -625,7 +632,7 @@ document.getElementById("resetFormula").addEventListener("click", async () => {
     });
     showMessage(
       document.getElementById("formulaMessage"),
-      "✓ Formula reset to defaults.",
+      "Formula reset to defaults.",
       "success",
     );
     return;
@@ -650,13 +657,13 @@ document.getElementById("resetFormula").addEventListener("click", async () => {
     });
     showMessage(
       document.getElementById("formulaMessage"),
-      "✓ Formula reset to defaults.",
+      "Formula reset to defaults.",
       "success",
     );
   } catch (err) {
     showMessage(
       document.getElementById("formulaMessage"),
-      `✗ ${err.message}`,
+      `${err.message}`,
       "error",
     );
   } finally {
@@ -665,28 +672,79 @@ document.getElementById("resetFormula").addEventListener("click", async () => {
   }
 });
 
-// ─── CSV file input and upload ────────────────────────────────────────────────
-
+// CSV file queue and multi-file upload
 const csvFileInput = document.getElementById("csvFile");
 const fileLabel = document.getElementById("fileLabel");
 const fileName = document.getElementById("fileName");
 const processFileBtn = document.getElementById("processFile");
 const uploadMessage = document.getElementById("uploadMessage");
 
-csvFileInput.addEventListener("change", (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  if (file.name.endsWith(".csv")) {
-    currentFileName = file.name;
-    fileName.textContent = file.name;
-    fileLabel.classList.add("has-file");
-    processFileBtn.disabled = false;
-  } else {
-    fileName.textContent = "Please select a CSV file";
+/**
+ * Add File objects to the queue (up to the 5-file cap), then re-render.
+ * Non-CSV files are silently skipped; excess files trigger a warning.
+ */
+function addFilesToQueue(newFiles) {
+  const csvFiles = Array.from(newFiles).filter((f) => f.name.endsWith(".csv"));
+  const remaining = 5 - queuedFiles.length;
+  csvFiles.slice(0, remaining).forEach((f) => queuedFiles.push(f));
+  if (csvFiles.length > remaining) {
+    showMessage(
+      uploadMessage,
+      `Maximum of 5 files - ${csvFiles.length - remaining} file(s) were not added.`,
+      "error",
+    );
+  }
+  renderFileQueue();
+}
+
+/** Rebuild the file-queue list UI from the current queuedFiles array. */
+function renderFileQueue() {
+  const queueEl = document.getElementById("fileQueue");
+
+  if (queuedFiles.length === 0) {
+    if (queueEl) {
+      queueEl.style.display = "none";
+      queueEl.innerHTML = "";
+    }
+    fileName.textContent = "Choose CSV files or drag here (up to 5)";
     fileLabel.classList.remove("has-file");
     processFileBtn.disabled = true;
-    showMessage(uploadMessage, "Please upload a valid CSV file", "error");
+    return;
   }
+
+  fileName.textContent =
+    queuedFiles.length === 5
+      ? "5 files selected - maximum reached"
+      : `${queuedFiles.length} file${queuedFiles.length > 1 ? "s" : ""} selected - click to add more`;
+  fileLabel.classList.add("has-file");
+  processFileBtn.disabled = false;
+
+  if (queueEl) {
+    queueEl.style.display = "block";
+    queueEl.innerHTML = queuedFiles
+      .map(
+        (f, i) => `
+        <div class="file-queue-item">
+          <span class="file-queue-name">${f.name}</span>
+          <button type="button" class="file-queue-remove" data-index="${i}" aria-label="Remove ${f.name}">×</button>
+        </div>`,
+      )
+      .join("");
+    queueEl.querySelectorAll(".file-queue-remove").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        queuedFiles.splice(parseInt(btn.dataset.index, 10), 1);
+        renderFileQueue();
+      });
+    });
+  }
+}
+
+// Allow selecting multiple .csv files; each pick adds to the queue.
+csvFileInput.addEventListener("change", (e) => {
+  if (!e.target.files.length) return;
+  addFilesToQueue(e.target.files);
+  // Reset so the same file can be re-added if it was removed from the queue.
+  csvFileInput.value = "";
 });
 
 fileLabel.addEventListener("dragover", (e) => {
@@ -699,14 +757,7 @@ fileLabel.addEventListener("dragleave", () => {
 fileLabel.addEventListener("drop", (e) => {
   e.preventDefault();
   fileLabel.style.borderColor = "var(--border)";
-  const file = e.dataTransfer.files[0];
-  if (file && file.name.endsWith(".csv")) {
-    currentFileName = file.name;
-    csvFileInput.files = e.dataTransfer.files;
-    fileName.textContent = file.name;
-    fileLabel.classList.add("has-file");
-    processFileBtn.disabled = false;
-  }
+  addFilesToQueue(e.dataTransfer.files);
 });
 
 function resetToUploadNewFile() {
@@ -714,32 +765,37 @@ function resetToUploadNewFile() {
   document.getElementById("resultsPanel")?.remove();
   document.getElementById("debugPanel")?.remove();
 
+  queuedFiles = [];
+  uploadedBatchId = null;
+  batchColumnPresence = {};
+  batchFileCount = 0;
   latestCategorizedColumns = {};
+
+  renderFileQueue();
   fileLabel.style.borderColor = "var(--border)";
-  fileLabel.classList.remove("has-file");
-  fileName.textContent = "Choose CSV file or drag here";
-  csvFileInput.value = "";
-  processFileBtn.disabled = true;
-  processFileBtn.textContent = "Process & Normalize Grades";
+  processFileBtn.textContent = "Process Files & Detect Columns";
   uploadMessage.innerHTML = "";
 
   uploadSection.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 processFileBtn.addEventListener("click", async () => {
-  const file = csvFileInput.files[0];
-  if (!file) return;
+  if (queuedFiles.length === 0) return;
 
   processFileBtn.disabled = true;
-  processFileBtn.textContent = "Uploading";
-  showMessage(uploadMessage, "Parsing CSV", "success");
+  processFileBtn.textContent = "Uploading…";
+  showMessage(
+    uploadMessage,
+    `Parsing ${queuedFiles.length} file${queuedFiles.length > 1 ? "s" : ""}…`,
+    "success",
+  );
 
   try {
     const formData = new FormData();
-    formData.append("file", file);
     formData.append("user_id", currentUserId);
+    queuedFiles.forEach((file, i) => formData.append(`file${i}`, file));
 
-    const response = await fetch(`${API_URL}/upload`, {
+    const response = await fetch(`${API_URL}/upload/multi`, {
       method: "POST",
       body: formData,
     });
@@ -747,22 +803,27 @@ processFileBtn.addEventListener("click", async () => {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Upload failed");
 
+    uploadedBatchId = data.batch_id;
+    batchColumnPresence = data.column_presence || {};
+    batchFileCount = data.file_count;
+
+    const totalStudents = data.files.reduce((sum, f) => sum + f.row_count, 0);
+    const fileWord = data.file_count === 1 ? "file" : "files";
     showMessage(
       uploadMessage,
-      `✓ Found ${data.row_count} student records`,
+      `${data.file_count} ${fileWord} processed - ${totalStudents} student records found`,
       "success",
     );
     renderCategorySelections(data.categories);
   } catch (err) {
-    showMessage(uploadMessage, `✗ ${err.message}`, "error");
+    showMessage(uploadMessage, `${err.message}`, "error");
   } finally {
     processFileBtn.disabled = false;
-    processFileBtn.textContent = "Process & Normalize Grades";
+    processFileBtn.textContent = "Process Files & Detect Columns";
   }
 });
 
-// ─── Column-selection panel ───────────────────────────────────────────────────
-
+// Column-selection panel
 function renderCategorySelections(categories) {
   document.getElementById("selectionsPanel")?.remove();
   latestCategorizedColumns = categories || {};
@@ -794,7 +855,7 @@ function renderCategorySelections(categories) {
     sessionStorage.getItem("selectionsPanelCollapsed") === "1";
   const startCollapsed = sessionCollapsed || hasSavedColumnPrefs;
 
-  // Columns controlled exclusively by the dropdowns — checkboxes are disabled for these.
+  // Columns controlled exclusively by the dropdowns - checkboxes are disabled for these.
   const dropdownControlledCols = new Set([
     ...attendanceCandidates,
     ...finalExamCandidates,
@@ -808,11 +869,18 @@ function renderCategorySelections(categories) {
   ]);
 
   const renderColCheckbox = (col, category) => {
+    // Warn when a column is missing from some (but not all) files in the batch.
+    const colPresence = batchColumnPresence[col];
+    const presenceBadge =
+      colPresence && batchFileCount > 1 && colPresence.length < batchFileCount
+        ? `<span class="presence-badge"> ${colPresence.length}/${batchFileCount} files</span>`
+        : "";
+
     if (dropdownControlledCols.has(col)) {
       return `
                 <label class="checkbox-label" style="opacity:0.5;cursor:default;" title="This column is selected via the dropdown above">
                     <input type="checkbox" name="preference" value="${col}" data-category="${category}" disabled>
-                    <span>${col} <em style="font-size:0.8em;color:var(--text-secondary);">(via dropdown)</em></span>
+                    <span>${col} <em style="font-size:0.8em;color:var(--text-secondary);">(via dropdown)</em>${presenceBadge}</span>
                 </label>
             `;
     }
@@ -820,14 +888,14 @@ function renderCategorySelections(categories) {
       return `
                 <label class="checkbox-label" style="opacity:0.45;cursor:default;">
                     <input type="checkbox" name="preference" value="${col}" data-category="${category}" disabled>
-                    <span>${col}</span>
+                    <span>${col}${presenceBadge}</span>
                 </label>
             `;
     }
     return `
             <label class="checkbox-label">
                 <input type="checkbox" name="preference" value="${col}" data-category="${category}" checked>
-                <span>${col}</span>
+                <span>${col}${presenceBadge}</span>
             </label>
         `;
   };
@@ -916,7 +984,7 @@ function renderCategorySelections(categories) {
                 Debug Normalize
             </button>
         </div>
-        ${isGuestMode ? '<p class="hint" style="margin-top:0.5rem;">Guest mode — results will not be saved.</p>' : ""}
+        ${isGuestMode ? '<p class="hint" style="margin-top:0.5rem;">Guest mode - results will not be saved.</p>' : ""}
         <div id="prefMessage"></div>
     `;
 
@@ -973,8 +1041,7 @@ function renderCategorySelections(categories) {
   updateCalculationScopeSummary();
 }
 
-// ─── Checkbox state helpers ───────────────────────────────────────────────────
-
+// Checkbox state helpers
 function applySavedPreferencesToSelections() {
   if (!savedPreferenceState) return;
 
@@ -1113,8 +1180,7 @@ function updateCalculationScopeSummary() {
     `;
 }
 
-// ─── Normalization and preferences persistence ────────────────────────────────
-
+// Normalization and preferences persistence
 /**
  * Read the formula weight inputs and return a config object for inline use.
  * Only fields with valid, positive finite numbers are included. Blank fields
@@ -1137,7 +1203,7 @@ async function persistUserPreferencesToServer(
   selectedAttendance,
   selectedFinalExam,
 ) {
-  // Guest sessions skip persistence entirely — nothing is stored to the DB.
+  // Guest sessions skip persistence entirely - nothing is stored to the DB.
   if (isGuestMode) return;
 
   const prefResponse = await fetch(`${API_URL}/save-preferences`, {
@@ -1194,7 +1260,7 @@ async function savePreferences(event) {
   } catch (err) {
     showMessage(
       document.getElementById("prefMessage"),
-      `✗ ${err.message}`,
+      `${err.message}`,
       "error",
     );
     saveBtn.disabled = false;
@@ -1216,6 +1282,7 @@ async function runNormalization(selectedFields) {
     // Guests cannot store formula config, so send any UI overrides inline.
     const body = {
       user_id: currentUserId,
+      batch_id: uploadedBatchId,
       selected_fields: selectedFields,
       selected_attendance_column: selectedAttendance || null,
       selected_final_exam_column: selectedFinalExam || null,
@@ -1225,7 +1292,7 @@ async function runNormalization(selectedFields) {
       if (uiConfig) body.formula_config = uiConfig;
     }
 
-    const response = await fetch(`${API_URL}/normalize`, {
+    const response = await fetch(`${API_URL}/normalize/multi`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -1238,7 +1305,7 @@ async function runNormalization(selectedFields) {
   } catch (err) {
     showMessage(
       document.getElementById("prefMessage"),
-      `✗ ${err.message}`,
+      `${err.message}`,
       "error",
     );
     document.getElementById("savePreferences").disabled = false;
@@ -1276,16 +1343,18 @@ async function runDebugNormalization() {
     // Guests send formula overrides inline (same pattern as runNormalization).
     const body = {
       user_id: currentUserId,
+      batch_id: uploadedBatchId,
       selected_fields: selectedFields,
       selected_attendance_column: selectedAttendance || null,
       selected_final_exam_column: selectedFinalExam || null,
+      debug: true,
     };
     if (isGuestMode) {
       const uiConfig = getFormulaConfigFromUI();
       if (uiConfig) body.formula_config = uiConfig;
     }
 
-    const response = await fetch(`${API_URL}/normalize/debug`, {
+    const response = await fetch(`${API_URL}/normalize/multi`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -1299,13 +1368,13 @@ async function runDebugNormalization() {
     displayDebugResults(data.debug);
     showMessage(
       document.getElementById("prefMessage"),
-      "✓ Debug normalization complete",
+      "Debug normalization complete",
       "success",
     );
   } catch (err) {
     showMessage(
       document.getElementById("prefMessage"),
-      `✗ ${err.message}`,
+      `${err.message}`,
       "error",
     );
   } finally {
@@ -1315,70 +1384,36 @@ async function runDebugNormalization() {
   }
 }
 
-// ─── Results display ──────────────────────────────────────────────────────────
+// Results display
 
 function displayNormalizedResults(data) {
   document.getElementById("resultsPanel")?.remove();
   document.getElementById("debugPanel")?.remove();
 
-  // Accumulate this section's results — not cleared between uploads, only on logout.
-  processedResults.push({
-    filename: currentFileName || `section_${processedResults.length + 1}.csv`,
-    columns: data.columns,
-    data: data.data,
-  });
-
-  const sectionIndex = processedResults.length;
-  const canAddMore = sectionIndex < 5;
-  const canCombine = sectionIndex >= 2;
-
-  // Build the processed-sections list for the combine box.
-  const processedListHTML = processedResults
-    .map(
-      (r, i) =>
-        `<li class="combine-box-list-item">${i + 1}. ${r.filename}</li>`,
-    )
-    .join("");
+  const fileCount = data.file_count || 1;
+  const sectionNote =
+    fileCount > 1
+      ? `<p style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:1rem;">
+             ${fileCount} lab sections combined - ${data.row_count} total students.
+           </p>`
+      : "";
 
   const panel = document.createElement("div");
   panel.id = "resultsPanel";
   panel.innerHTML = `
         <div class="decorative-line"></div>
-        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.5rem;">
-            <h2 style="color:var(--accent);margin:0;">Normalized Grade Results</h2>
-            <span class="section-badge">Section ${sectionIndex} / 5</span>
-        </div>
-        <p style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:1rem;">
-            File: <strong>${processedResults[sectionIndex - 1].filename}</strong>
-        </p>
+        <h2 style="color:var(--accent);margin-bottom:0.5rem;">Normalized Grade Results</h2>
+        ${sectionNote}
         <div style="overflow-x:auto;margin-bottom:1.5rem;">
             <table id="resultsTable" style="width:100%;border-collapse:collapse;"></table>
         </div>
-        ${
-          canCombine
-            ? `<div class="combine-box">
-            <p class="combine-box-title">Lab Sections Processed (${sectionIndex})</p>
-            <ul class="combine-box-list">${processedListHTML}</ul>
-            <button type="button" class="btn btn-primary" id="combineAllResults">
-                ↓ Combine All Sections into One CSV
-            </button>
-        </div>`
-            : ""
-        }
         <div class="action-row results-actions">
             <button type="button" class="btn btn-primary" id="downloadCSV">
-                Download This Section (CSV)
+                Download Results (CSV)
             </button>
-            ${
-              canAddMore
-                ? `<button type="button" class="btn btn-secondary" id="uploadAnotherFile">
-                Process Another Lab Section
-                <span style="font-size:0.8rem;opacity:0.7;">(${5 - sectionIndex} more)</span>
-            </button>`
-                : `<span style="font-size:0.85rem;color:var(--text-secondary);padding:0.5rem 0;align-self:center;">
-                Maximum of 5 sections reached
-            </span>`
-            }
+            <button type="button" class="btn btn-secondary" id="uploadAnotherFile">
+                Upload New Files
+            </button>
         </div>
     `;
 
@@ -1407,18 +1442,14 @@ function displayNormalizedResults(data) {
   table.innerHTML = tableHTML;
 
   document.getElementById("downloadCSV").addEventListener("click", () => {
-    const r = processedResults[sectionIndex - 1];
-    downloadCSV(
-      r.columns,
-      r.data,
-      `normalized_grades_section${sectionIndex}_${currentUserId}.csv`,
-    );
+    const filename =
+      fileCount > 1
+        ? `combined_grades_${currentUserId}_${fileCount}_sections.csv`
+        : `normalized_grades_${currentUserId}.csv`;
+    downloadCSV(data.columns, data.data, filename);
   });
-  document.getElementById("uploadAnotherFile")?.addEventListener("click", () => {
+  document.getElementById("uploadAnotherFile").addEventListener("click", () => {
     resetToUploadNewFile();
-  });
-  document.getElementById("combineAllResults")?.addEventListener("click", () => {
-    combineAllResults();
   });
 
   showMessage(
@@ -1431,22 +1462,6 @@ function displayNormalizedResults(data) {
   document.getElementById("savePreferences").textContent = isGuestMode
     ? "Calculate Grades"
     : "Save & Calculate Grades";
-}
-
-/**
- * Merge all accumulated section results into a single CSV and trigger download.
- * Columns are taken from the first section — all Canvas exports for the same
- * course share the same output schema, so this is safe.
- */
-function combineAllResults() {
-  if (processedResults.length === 0) return;
-  const columns = processedResults[0].columns;
-  const combinedData = processedResults.flatMap((r) => r.data);
-  downloadCSV(
-    columns,
-    combinedData,
-    `combined_grades_${currentUserId}_all_sections.csv`,
-  );
 }
 
 function displayDebugResults(debug) {
@@ -1507,8 +1522,7 @@ function displayDebugResults(debug) {
   document.querySelector(".card").appendChild(panel);
 }
 
-// ─── CSV export ───────────────────────────────────────────────────────────────
-
+// CSV export
 function downloadCSV(columns, data, filename) {
   let csv = columns.join(",") + "\n";
   data.forEach((row) => {

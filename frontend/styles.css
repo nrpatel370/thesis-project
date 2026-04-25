@@ -475,45 +475,78 @@ body {
   margin-top: 0.5rem;
 }
 
-/* ── Multi-section results UI ────────────────────────────────────────────── */
+/* ── Multi-file upload queue ─────────────────────────────────────────────── */
 
-/* Badge showing "Section N / 5" next to the results heading */
-.section-badge {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-secondary);
+/* Container rendered below the dropzone showing each queued file */
+.file-queue {
+  margin-top: 0.6rem;
+  display: flex !important;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* One row per queued file */
+.file-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 0.2rem 0.65rem;
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.file-queue-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+/* × remove button for each queued file */
+.file-queue-remove {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  border-radius: 3px;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+
+.file-queue-remove:hover {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+}
+
+/* ── Column presence badge ───────────────────────────────────────────────── */
+
+/* Shown next to a column name when it is missing from some uploaded files */
+.presence-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #8a6000;
+  background: #fff3cd;
+  border: 1px solid #f0c040;
+  border-radius: 10px;
+  padding: 0.05rem 0.45rem;
+  vertical-align: middle;
   white-space: nowrap;
 }
 
-/* Box shown when 2+ sections have been processed, listing files and combine button */
-.combine-box {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1rem 1.1rem;
-  margin-bottom: 1.25rem;
-}
-
-.combine-box-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-}
-
-.combine-box-list {
-  list-style: none;
-  margin: 0 0 0.85rem 0;
-  padding: 0;
-}
-
-.combine-box-list-item {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  padding: 0.1rem 0;
+[data-theme="dark"] .presence-badge {
+  color: #f5d27a;
+  background: #3a2e00;
+  border-color: #7a5e00;
 }
 
 .column-choice-grid {
