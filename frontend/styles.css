@@ -475,6 +475,47 @@ body {
   margin-top: 0.5rem;
 }
 
+/* ── Multi-section results UI ────────────────────────────────────────────── */
+
+/* Badge showing "Section N / 5" next to the results heading */
+.section-badge {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.2rem 0.65rem;
+  white-space: nowrap;
+}
+
+/* Box shown when 2+ sections have been processed, listing files and combine button */
+.combine-box {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1.25rem;
+}
+
+.combine-box-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.combine-box-list {
+  list-style: none;
+  margin: 0 0 0.85rem 0;
+  padding: 0;
+}
+
+.combine-box-list-item {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding: 0.1rem 0;
+}
+
 .column-choice-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

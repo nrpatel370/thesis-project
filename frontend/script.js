@@ -46,6 +46,8 @@ function logout() {
   latestCategorizedColumns = {};
   savedPreferenceState = null;
   formulaConfig = null;
+  processedResults = [];
+  currentFileName = "";
   sessionStorage.removeItem("selectionsPanelCollapsed");
 
   document.getElementById("selectionsPanel")?.remove();
@@ -142,6 +144,8 @@ let userCategories = null; // custom or default category config
 let latestCategorizedColumns = {}; // most recent upload's column-to-category map
 let savedPreferenceState = null; // persists across CSV re-uploads (CRN mode only)
 let formulaConfig = null; // active formula weights for this CRN
+let processedResults = []; // accumulated normalized results across multiple CSV uploads (up to 5)
+let currentFileName = ""; // filename of the most recently selected CSV
 
 // Maps each formula input's element ID to the backend config key and display label.
 // Used by save/populate/reset handlers to avoid duplicating field metadata.
@@ -673,6 +677,7 @@ csvFileInput.addEventListener("change", (e) => {
   const file = e.target.files[0];
   if (!file) return;
   if (file.name.endsWith(".csv")) {
+    currentFileName = file.name;
     fileName.textContent = file.name;
     fileLabel.classList.add("has-file");
     processFileBtn.disabled = false;
@@ -696,6 +701,7 @@ fileLabel.addEventListener("drop", (e) => {
   fileLabel.style.borderColor = "var(--border)";
   const file = e.dataTransfer.files[0];
   if (file && file.name.endsWith(".csv")) {
+    currentFileName = file.name;
     csvFileInput.files = e.dataTransfer.files;
     fileName.textContent = file.name;
     fileLabel.classList.add("has-file");
@@ -1315,21 +1321,64 @@ function displayNormalizedResults(data) {
   document.getElementById("resultsPanel")?.remove();
   document.getElementById("debugPanel")?.remove();
 
+  // Accumulate this section's results — not cleared between uploads, only on logout.
+  processedResults.push({
+    filename: currentFileName || `section_${processedResults.length + 1}.csv`,
+    columns: data.columns,
+    data: data.data,
+  });
+
+  const sectionIndex = processedResults.length;
+  const canAddMore = sectionIndex < 5;
+  const canCombine = sectionIndex >= 2;
+
+  // Build the processed-sections list for the combine box.
+  const processedListHTML = processedResults
+    .map(
+      (r, i) =>
+        `<li class="combine-box-list-item">${i + 1}. ${r.filename}</li>`,
+    )
+    .join("");
+
   const panel = document.createElement("div");
   panel.id = "resultsPanel";
   panel.innerHTML = `
         <div class="decorative-line"></div>
-        <h2 style="color:var(--accent);margin-bottom:1rem;">Normalized Grade Results</h2>
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.5rem;">
+            <h2 style="color:var(--accent);margin:0;">Normalized Grade Results</h2>
+            <span class="section-badge">Section ${sectionIndex} / 5</span>
+        </div>
+        <p style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:1rem;">
+            File: <strong>${processedResults[sectionIndex - 1].filename}</strong>
+        </p>
         <div style="overflow-x:auto;margin-bottom:1.5rem;">
             <table id="resultsTable" style="width:100%;border-collapse:collapse;"></table>
         </div>
+        ${
+          canCombine
+            ? `<div class="combine-box">
+            <p class="combine-box-title">Lab Sections Processed (${sectionIndex})</p>
+            <ul class="combine-box-list">${processedListHTML}</ul>
+            <button type="button" class="btn btn-primary" id="combineAllResults">
+                ↓ Combine All Sections into One CSV
+            </button>
+        </div>`
+            : ""
+        }
         <div class="action-row results-actions">
             <button type="button" class="btn btn-primary" id="downloadCSV">
-                Download Results (CSV)
+                Download This Section (CSV)
             </button>
-            <button type="button" class="btn btn-secondary" id="uploadAnotherFile">
-                Upload another CSV
-            </button>
+            ${
+              canAddMore
+                ? `<button type="button" class="btn btn-secondary" id="uploadAnotherFile">
+                Process Another Lab Section
+                <span style="font-size:0.8rem;opacity:0.7;">(${5 - sectionIndex} more)</span>
+            </button>`
+                : `<span style="font-size:0.85rem;color:var(--text-secondary);padding:0.5rem 0;align-self:center;">
+                Maximum of 5 sections reached
+            </span>`
+            }
         </div>
     `;
 
@@ -1356,15 +1405,20 @@ function displayNormalizedResults(data) {
   tableHTML += "</tbody>";
 
   table.innerHTML = tableHTML;
+
   document.getElementById("downloadCSV").addEventListener("click", () => {
+    const r = processedResults[sectionIndex - 1];
     downloadCSV(
-      data.columns,
-      data.data,
-      `normalized_grades_${currentUserId}.csv`,
+      r.columns,
+      r.data,
+      `normalized_grades_section${sectionIndex}_${currentUserId}.csv`,
     );
   });
-  document.getElementById("uploadAnotherFile").addEventListener("click", () => {
+  document.getElementById("uploadAnotherFile")?.addEventListener("click", () => {
     resetToUploadNewFile();
+  });
+  document.getElementById("combineAllResults")?.addEventListener("click", () => {
+    combineAllResults();
   });
 
   showMessage(
@@ -1374,8 +1428,25 @@ function displayNormalizedResults(data) {
   );
 
   document.getElementById("savePreferences").disabled = false;
-  document.getElementById("savePreferences").textContent =
-    "Save & Calculate Grades";
+  document.getElementById("savePreferences").textContent = isGuestMode
+    ? "Calculate Grades"
+    : "Save & Calculate Grades";
+}
+
+/**
+ * Merge all accumulated section results into a single CSV and trigger download.
+ * Columns are taken from the first section — all Canvas exports for the same
+ * course share the same output schema, so this is safe.
+ */
+function combineAllResults() {
+  if (processedResults.length === 0) return;
+  const columns = processedResults[0].columns;
+  const combinedData = processedResults.flatMap((r) => r.data);
+  downloadCSV(
+    columns,
+    combinedData,
+    `combined_grades_${currentUserId}_all_sections.csv`,
+  );
 }
 
 function displayDebugResults(debug) {
