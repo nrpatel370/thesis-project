@@ -20,6 +20,7 @@ from a different origin during local development.
 
 import io
 import json
+import uuid
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -35,6 +36,11 @@ from normalization import (
 from serializers import rows_to_json_safe_records
 
 app = Flask(__name__)
+
+# In-memory store for multi-file upload batches.
+# Each entry lives until consumed by /normalize/multi or the server restarts.
+# Structure: { batch_id: [ {filename, df, row_count}, … ] }
+_batch_store: dict = {}
 
 
 def read_grades_csv(csv_text):
@@ -103,6 +109,7 @@ def add_cors_headers(response):
 
 
 @app.route("/upload", methods=["OPTIONS"])
+@app.route("/upload/multi", methods=["OPTIONS"])
 @app.route("/save-preferences", methods=["OPTIONS"])
 @app.route("/preferences/<user_id>", methods=["OPTIONS"])
 @app.route("/categories", methods=["OPTIONS"])
@@ -110,6 +117,7 @@ def add_cors_headers(response):
 @app.route("/categories/<user_id>", methods=["OPTIONS"])
 @app.route("/normalize", methods=["OPTIONS"])
 @app.route("/normalize/debug", methods=["OPTIONS"])
+@app.route("/normalize/multi", methods=["OPTIONS"])
 @app.route("/config", methods=["OPTIONS"])
 @app.route("/config/<user_id>", methods=["OPTIONS"])
 @app.route("/exists/<user_id>", methods=["OPTIONS"])
@@ -138,7 +146,7 @@ def upload_csv():
                 "INSERT INTO uploaded_csvs (user_id, csv_data) VALUES (?, ?)",
                 (user_id, csv_content),
             )
-            # Prune old uploads — keep only the latest row per user to avoid unbounded growth.
+            # Prune old uploads - keep only the latest row per user to avoid unbounded growth.
             conn.execute(
                 """
                 DELETE FROM uploaded_csvs
@@ -164,6 +172,171 @@ def upload_csv():
         ), 200
     except Exception as error:
         return json_error(f"Failed to parse CSV: {error}", 500)
+
+
+@app.route("/upload/multi", methods=["POST"])
+def upload_multi_csv():
+    """Parse up to 5 Canvas CSV exports and return a unified column categorization.
+
+    Files are supplied as multipart fields named file0, file1, … file4.
+    The union of all column headers is categorized once using the CRN's saved
+    (or default) category keywords. A column_presence map indicates which file
+    indices contain each column, so the frontend can warn the TA about mismatches.
+
+    The parsed DataFrames are stored in _batch_store under a generated batch_id
+    which the frontend must include in the subsequent /normalize/multi request.
+    """
+    files = [request.files.get(f"file{i}") for i in range(5)]
+    files = [f for f in files if f is not None]
+
+    if not files:
+        return json_error("No files provided")
+
+    user_id = request.form.get("user_id", DEFAULT_USER_ID)
+
+    # Parse every uploaded file, failing fast on the first bad one.
+    parsed = []
+    for f in files:
+        if not f.filename.endswith(".csv"):
+            return json_error(f"'{f.filename}' must be a CSV file")
+        try:
+            csv_content = f.read().decode("utf-8")
+            df = read_grades_csv(csv_content)
+            if df.empty:
+                return json_error(f"'{f.filename}' appears to be empty")
+            parsed.append({"filename": f.filename, "df": df})
+        except Exception as e:
+            return json_error(f"Failed to parse '{f.filename}': {e}", 500)
+
+    # Build the union of all column headers.
+    seen_cols: set = set()
+    union_columns: list = []
+    for p in parsed:
+        for col in p["df"].columns.tolist():
+            if col not in seen_cols:
+                union_columns.append(col)
+                seen_cols.add(col)
+
+    # Track which file indices contain each column (used for mismatch badges).
+    column_presence = {
+        col: [i for i, p in enumerate(parsed) if col in p["df"].columns]
+        for col in union_columns
+    }
+
+    # Categorize the union of columns with the CRN's saved (or default) categories.
+    custom_categories = get_user_categories_from_db(user_id)
+    categories = categorise_columns(union_columns, custom_categories)
+
+    # Store parsed DataFrames for the subsequent /normalize/multi call.
+    batch_id = str(uuid.uuid4())
+    _batch_store[batch_id] = [
+        {
+            "filename": p["filename"],
+            "df": p["df"],
+            "row_count": count_gradesheet_data_rows(p["df"]),
+        }
+        for p in parsed
+    ]
+
+    return jsonify(
+        {
+            "batch_id": batch_id,
+            "file_count": len(parsed),
+            "files": [
+                {"filename": e["filename"], "row_count": e["row_count"]}
+                for e in _batch_store[batch_id]
+            ],
+            "categories": categories,
+            "column_presence": column_presence,
+        }
+    ), 200
+
+
+@app.route("/normalize/multi", methods=["POST"])
+def normalize_multi():
+    """Normalize all files in a batch with a single set of column preferences.
+
+    Accepts batch_id (from /upload/multi) plus the same selected_fields,
+    attendance/final exam overrides, and optional formula_config as /normalize.
+    Each file is normalized independently and results are concatenated into one
+    DataFrame with a 'Section' column identifying the source filename.
+
+    When debug=true is included in the body, the first file's per-student
+    breakdown is returned alongside the combined results.
+
+    The batch is removed from _batch_store after successful normalization.
+    """
+    data = request.get_json()
+    if not data:
+        return json_error("No JSON body provided")
+
+    batch_id = data.get("batch_id")
+    if not batch_id:
+        return json_error("batch_id is required")
+    if batch_id not in _batch_store:
+        return json_error("Batch not found or expired. Please re-upload your files.", 404)
+
+    user_id = data.get("user_id", DEFAULT_USER_ID)
+    selected_fields = data.get("selected_fields", [])
+    selected_attendance_column = data.get("selected_attendance_column")
+    selected_final_exam_column = data.get("selected_final_exam_column")
+    include_debug = bool(data.get("debug", False))
+
+    if not selected_fields:
+        return json_error("No fields selected")
+
+    inline_config = data.get("formula_config")
+    formula_config = inline_config if inline_config is not None else get_formula_config_from_db(user_id)
+
+    batch = _batch_store[batch_id]
+    result_dfs = []
+    first_debug = None
+
+    try:
+        for i, entry in enumerate(batch):
+            if include_debug and i == 0:
+                result_df, first_debug = build_normalized_with_debug(
+                    entry["df"],
+                    selected_fields,
+                    selected_attendance_override=selected_attendance_column,
+                    selected_final_exam_override=selected_final_exam_column,
+                    formula_config=formula_config,
+                )
+            else:
+                result_df = build_normalized_dataframe(
+                    entry["df"],
+                    selected_fields,
+                    selected_attendance_override=selected_attendance_column,
+                    selected_final_exam_override=selected_final_exam_column,
+                    formula_config=formula_config,
+                )
+
+            # Prepend a Section column so the TA can identify each row's origin.
+            result_df.insert(0, "Section", entry["filename"])
+            result_dfs.append(result_df)
+
+        combined_df = pd.concat(result_dfs, ignore_index=True)
+
+        # Consume the batch (no longer needed after normalization succeeds).
+        del _batch_store[batch_id]
+
+        payload = {
+            "message": "Grades normalized successfully",
+            "columns": combined_df.columns.tolist(),
+            "data": rows_to_json_safe_records(combined_df),
+            "row_count": len(combined_df),
+            "file_count": len(batch),
+        }
+        if include_debug and first_debug:
+            payload["debug"] = first_debug
+            payload["debug_note"] = (
+                f"Debug details shown for first section only: {batch[0]['filename']}"
+            )
+
+        return jsonify(payload), 200
+
+    except Exception as error:
+        return json_error(f"Normalization failed: {error}", 500)
 
 
 @app.route("/normalize", methods=["POST"])

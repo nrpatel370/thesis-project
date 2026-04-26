@@ -64,8 +64,10 @@
             <h3 class="guide-step-title">Upload CSV</h3>
           </div>
           <p class="guide-step-body">
-            Export your Canvas gradebook as a CSV file and drag it into the
-            upload area or click to browse.
+            Add up to <strong>5 lab-section CSV files</strong> to the upload
+            queue (click or drag-and-drop). Click
+            <strong>Process Files</strong> to parse all sections at once and
+            detect columns. The combined results download as a single file.
           </p>
         </div>
       </aside>
@@ -377,17 +379,31 @@
 
             <div class="form-group">
               <label class="form-label">Upload Student Grades (CSV)</label>
+              <p
+                style="
+                  color: var(--text-secondary);
+                  font-size: 0.85rem;
+                  margin-top: 0.25rem;
+                  margin-bottom: 0.6rem;
+                "
+              >
+                You can process up to 5 lab-section CSVs and combine the
+                results at the end.
+              </p>
               <div class="file-upload-wrapper">
                 <input
                   type="file"
                   id="csvFile"
                   class="file-upload-input"
                   accept=".csv"
+                  multiple
                 />
                 <label for="csvFile" class="file-upload-label" id="fileLabel">
-                  <span id="fileName">Choose CSV file or drag here</span>
+                  <span id="fileName">Choose CSV files or drag here (up to 5)</span>
                 </label>
               </div>
+              <!-- Populated by renderFileQueue() as files are added -->
+              <div id="fileQueue" class="file-queue" style="display: none"></div>
             </div>
 
             <button
@@ -396,7 +412,7 @@
               disabled
               type="button"
             >
-              Process & Normalize Grades
+              Process Files & Detect Columns
             </button>
             <div id="uploadMessage"></div>
           </div>

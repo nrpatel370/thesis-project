@@ -14,10 +14,10 @@ Both delegate to the private _compute_normalization(), which:
      weights (_compute_normalization / _dynamic_denominator).
 
 Formula math (default weights):
-  lab_component  = (lab_raw_sum  / lab_denominator)  × 40
-  dd_component   = (dd_raw_sum   / dd_denominator)   × 60
-  lab_value      = (lab_component + dd_component)     × 5.3   max ≈ 530 pts
-  attendance     = raw_attendance × 1.2               max ≈ 120 pts
+  lab_component  = (lab_raw_sum  / lab_denominator)  * 40
+  dd_component   = (dd_raw_sum   / dd_denominator)   * 60
+  lab_value      = (lab_component + dd_component)     * 5.3   max ≈ 530 pts
+  attendance     = raw_attendance * 1.2               max ≈ 120 pts
   (multiplier skipped when the column is literally "Attendance Total")
 
 All eight weights are overridable per-CRN via the formula_config dict loaded
