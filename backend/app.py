@@ -312,7 +312,7 @@ def normalize_multi():
                 )
 
             # Prepend a Section column so the TA can identify each row's origin.
-            result_df.insert(0, "Section", entry["filename"])
+            result_df.insert(0, "File Name", entry["filename"])
             result_dfs.append(result_df)
 
         combined_df = pd.concat(result_dfs, ignore_index=True)
