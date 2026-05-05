@@ -20,6 +20,7 @@ from a different origin during local development.
 
 import io
 import json
+import re
 import uuid
 
 import pandas as pd
@@ -43,10 +44,49 @@ app = Flask(__name__)
 _batch_store: dict = {}
 
 
+def _strip_canvas_id(col_name: str) -> str:
+    """Remove Canvas's trailing numeric assignment ID from a column name.
+
+    Canvas appends a unique integer ID in parentheses to every graded item,
+    e.g. 'Lab Assignment 1 (2174782)'.  The same assignment exported from two
+    different section gradebooks will carry different IDs, causing the multi-file
+    union to treat them as separate columns.  Stripping the suffix normalises
+    names so they merge correctly.
+
+    Only a *purely numeric* parenthetical at the very end of the string is
+    removed, so columns like 'Final (Curved)' or 'Lab (Week 1)' are untouched.
+    Metadata columns (Student, ID, SIS User ID, Section \u2026) never carry this
+    suffix and are returned unchanged.
+    """
+    return re.sub(r"\s*\(\d+\)\s*$", "", col_name).strip()
+
+
+def _normalise_column_names(df: pd.DataFrame) -> pd.DataFrame:
+    """Strip Canvas IDs from all column headers and resolve any resulting duplicates.
+
+    If two columns in the same file normalise to the same base name (i.e. Canvas
+    gave the same assignment name two different IDs), they get a simple counter
+    suffix \u2014 '(2)', '(3)' \u2014 so pandas never silently overwrites one with the other.
+    """
+    seen: dict = {}
+    new_names = []
+    for col in df.columns:
+        base = _strip_canvas_id(col)
+        if base in seen:
+            seen[base] += 1
+            new_names.append(f"{base} ({seen[base]})")
+        else:
+            seen[base] = 0
+            new_names.append(base)
+    df.columns = new_names
+    return df
+
+
 def read_grades_csv(csv_text):
-    """Parse gradebook CSV; strip BOM so column names match across exports."""
+    """Parse gradebook CSV; strip BOM and normalise Canvas column IDs."""
     text = csv_text.lstrip("\ufeff") if isinstance(csv_text, str) else csv_text
-    return pd.read_csv(io.StringIO(text))
+    df = pd.read_csv(io.StringIO(text))
+    return _normalise_column_names(df)
 
 
 def json_error(message, status_code=400):
