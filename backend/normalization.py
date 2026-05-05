@@ -243,7 +243,10 @@ def _compute_normalization(
     if attendance_col and _is_attendance_total_column(attendance_col):
         attendance_value = attendance_series
     else:
-        attendance_value = attendance_series * attendance_mult
+        # Multiply by the attendance multiplier (default 1.2) to give students
+        # some cushion, then clamp to the configured maximum so scores never
+        # exceed attendance_total_pts (default 120).
+        attendance_value = (attendance_series * attendance_mult).clip(upper=attendance_total_pts)
 
     final_exam_2 = (
         clean_df[final_exam_col]
