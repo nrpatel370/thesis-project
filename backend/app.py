@@ -34,6 +34,7 @@ from normalization import (
     build_normalized_with_debug,
     count_gradesheet_data_rows,
 )
+from onlinegdb_merge import merge_gdb_with_results, resolve_ambiguous
 from serializers import rows_to_json_safe_records
 
 app = Flask(__name__)
@@ -161,6 +162,8 @@ def add_cors_headers(response):
 @app.route("/config", methods=["OPTIONS"])
 @app.route("/config/<user_id>", methods=["OPTIONS"])
 @app.route("/exists/<user_id>", methods=["OPTIONS"])
+@app.route("/merge/onlinegdb", methods=["OPTIONS"])
+@app.route("/merge/onlinegdb/resolve", methods=["OPTIONS"])
 def handle_preflight(user_id=None):
     return jsonify({"status": "ok"}), 200
 
@@ -676,6 +679,110 @@ def check_user_exists(user_id):
         return jsonify({"exists": row is not None}), 200
     except Exception as error:
         return json_error(f"Database error: {error}", 500)
+
+
+@app.route("/merge/onlinegdb", methods=["POST"])
+def merge_onlinegdb():
+    """Merge an OnlineGDB CSV export into the current normalized results.
+
+    Accepts multipart/form-data:
+      file  — the OnlineGDB CSV file
+      rows  — JSON-encoded list of normalized result rows (from /normalize/multi)
+
+    Optional form fields:
+      gdb_name_col   — column name for student names  (default: "Student Name")
+      gdb_total_col  — column name for total grade    (default: "Total Grade")
+
+    Returns JSON:
+      rows                  — merged rows (test students removed)
+      columns               — updated column list
+      ambiguous             — entries needing manual resolution
+      matched               — auto-matched count
+      unmatched             — names that received score "0"
+      test_students_removed — count of test-student rows dropped
+      output_col            — name of the appended column
+    """
+    gdb_file = request.files.get("file")
+    if not gdb_file:
+        return json_error("No OnlineGDB CSV file provided.")
+    if not gdb_file.filename.lower().endswith(".csv"):
+        return json_error("OnlineGDB file must be a CSV.")
+
+    rows_json = request.form.get("rows")
+    if not rows_json:
+        return json_error("No normalized rows provided.")
+    try:
+        normalized_rows = json.loads(rows_json)
+    except Exception:
+        return json_error("Invalid rows JSON.")
+    if not isinstance(normalized_rows, list):
+        return json_error("rows must be a JSON array.")
+
+    gdb_name_col = request.form.get("gdb_name_col", "Student Name")
+    gdb_total_col = request.form.get("gdb_total_col", "Total Grade")
+
+    try:
+        gdb_text = gdb_file.read().decode("utf-8-sig")
+    except Exception as e:
+        return json_error(f"Could not read OnlineGDB file: {e}")
+
+    try:
+        import io as _io
+        gdb_df = pd.read_csv(_io.StringIO(gdb_text))
+        gdb_rows = gdb_df.to_dict(orient="records")
+    except Exception as e:
+        return json_error(f"Failed to parse OnlineGDB CSV: {e}", 500)
+
+    if gdb_name_col not in gdb_df.columns:
+        return json_error(
+            f"Column '{gdb_name_col}' not found in OnlineGDB CSV. "
+            f"Available columns: {gdb_df.columns.tolist()}"
+        )
+    if gdb_total_col not in gdb_df.columns:
+        return json_error(
+            f"Column '{gdb_total_col}' not found in OnlineGDB CSV. "
+            f"Available columns: {gdb_df.columns.tolist()}"
+        )
+
+    try:
+        result = merge_gdb_with_results(
+            normalized_rows,
+            gdb_rows,
+            gdb_name_col=gdb_name_col,
+            gdb_total_col=gdb_total_col,
+        )
+    except Exception as e:
+        return json_error(f"Merge failed: {e}", 500)
+
+    return jsonify(result), 200
+
+
+@app.route("/merge/onlinegdb/resolve", methods=["POST"])
+def resolve_onlinegdb():
+    """Apply manual resolutions for ambiguous first-name-only OnlineGDB matches.
+
+    Accepts JSON body:
+      rows        — the merged rows returned by /merge/onlinegdb
+      resolutions — list of {canvas_name: str, gdb_score: str}
+
+    Returns JSON:
+      rows — updated rows with resolved scores applied
+    """
+    data = request.get_json(silent=True) or {}
+    rows = data.get("rows")
+    resolutions = data.get("resolutions")
+
+    if not isinstance(rows, list):
+        return json_error("rows must be a JSON array.")
+    if not isinstance(resolutions, list):
+        return json_error("resolutions must be a JSON array.")
+
+    try:
+        resolved = resolve_ambiguous(rows, resolutions)
+    except Exception as e:
+        return json_error(f"Resolution failed: {e}", 500)
+
+    return jsonify({"rows": resolved}), 200
 
 
 if __name__ == "__main__":

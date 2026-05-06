@@ -1171,3 +1171,90 @@ body {
     padding: 0 1rem;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* OnlineGDB merge section                                             */
+/* ------------------------------------------------------------------ */
+
+.gdb-merge-section {
+  margin-top: 2rem;
+}
+
+
+/* Ambiguous resolution panel */
+.gdb-ambiguous-header {
+  margin-bottom: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.gdb-ambiguous-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-top: 0.5rem;
+  background: var(--bg-card);
+  flex-wrap: wrap;
+}
+
+.gdb-ambiguous-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 180px;
+}
+
+.gdb-score-badge {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--info);
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--info) 30%, transparent);
+  border-radius: 10px;
+  padding: 0.05rem 0.5rem;
+}
+
+.gdb-arrow {
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+}
+
+.gdb-candidate-select {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.gdb-candidate-select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Success / error inline messages */
+.msg-success {
+  color: var(--success);
+  font-size: 0.9rem;
+}
+
+.msg-error {
+  color: var(--error);
+  font-size: 0.9rem;
+}
+
+[data-theme="dark"] .gdb-ambiguous-header {
+  background: var(--bg-secondary);
+}
+
+[data-theme="dark"] .gdb-candidate-select {
+  background: var(--bg-secondary);
+}

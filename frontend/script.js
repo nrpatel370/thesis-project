@@ -55,6 +55,11 @@ function logout() {
   document.getElementById("selectionsPanel")?.remove();
   document.getElementById("resultsPanel")?.remove();
   document.getElementById("debugPanel")?.remove();
+  document.getElementById("gdbMergeSection")?.remove();
+
+  currentResultRows = [];
+  currentResultColumns = [];
+  currentResultFileCount = 1;
 
   const csvFileInput = document.getElementById("csvFile");
   const fileLabel = document.getElementById("fileLabel");
@@ -156,6 +161,11 @@ let queuedFiles = []; // File objects staged for upload, max 5
 let uploadedBatchId = null; // batch_id returned by /upload/multi, used in /normalize/multi
 let batchColumnPresence = {}; // {col: [file_indices]} - which files have each column
 let batchFileCount = 0; // number of files in the active batch
+// Live result state — updated in-place as GDB merge/resolve runs so the
+// download button always reflects the latest data.
+let currentResultRows = []; // list of row objects currently shown in the table
+let currentResultColumns = []; // ordered column list currently shown in the table
+let currentResultFileCount = 1; // used for the download filename
 
 // Maps each formula input's element ID to the backend config key and display label.
 // Used by save/populate/reset handlers to avoid duplicating field metadata.
@@ -764,12 +774,16 @@ function resetToUploadNewFile() {
   document.getElementById("selectionsPanel")?.remove();
   document.getElementById("resultsPanel")?.remove();
   document.getElementById("debugPanel")?.remove();
+  document.getElementById("gdbMergeSection")?.remove();
 
   queuedFiles = [];
   uploadedBatchId = null;
   batchColumnPresence = {};
   batchFileCount = 0;
   latestCategorizedColumns = {};
+  currentResultRows = [];
+  currentResultColumns = [];
+  currentResultFileCount = 1;
 
   renderFileQueue();
   fileLabel.style.borderColor = "var(--border)";
@@ -1441,12 +1455,18 @@ function displayNormalizedResults(data) {
 
   table.innerHTML = tableHTML;
 
+  // Keep live state in sync so GDB merge and the download button always
+  // operate on the current version of the data.
+  currentResultRows = [...data.data];
+  currentResultColumns = [...data.columns];
+  currentResultFileCount = fileCount;
+
   document.getElementById("downloadCSV").addEventListener("click", () => {
     const filename =
-      fileCount > 1
-        ? `combined_grades_${currentUserId}_${fileCount}_sections.csv`
+      currentResultFileCount > 1
+        ? `combined_grades_${currentUserId}_${currentResultFileCount}_sections.csv`
         : `normalized_grades_${currentUserId}.csv`;
-    downloadCSV(data.columns, data.data, filename);
+    downloadCSV(currentResultColumns, currentResultRows, filename);
   });
   document.getElementById("uploadAnotherFile").addEventListener("click", () => {
     resetToUploadNewFile();
@@ -1462,6 +1482,265 @@ function displayNormalizedResults(data) {
   document.getElementById("savePreferences").textContent = isGuestMode
     ? "Calculate Grades"
     : "Save & Calculate Grades";
+
+  renderGdbMergeSection();
+}
+
+// ---------------------------------------------------------------------------
+// OnlineGDB merge UI
+// ---------------------------------------------------------------------------
+
+function renderGdbMergeSection() {
+  document.getElementById("gdbMergeSection")?.remove();
+
+  const section = document.createElement("div");
+  section.id = "gdbMergeSection";
+  section.className = "gdb-merge-section";
+  section.innerHTML = `
+    <div class="decorative-line"></div>
+    <h2 style="color:var(--accent);margin-bottom:0.4rem;">Merge OnlineGDB Scores</h2>
+    <p style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:1rem;">
+      Upload your OnlineGDB classroom report CSV to automatically match and append
+      each student's total grade. Test students will be removed automatically.
+    </p>
+    <div style="margin-bottom:1rem;">
+      <input type="file" id="gdbFileInput" accept=".csv" style="display:none;">
+      <label for="gdbFileInput" class="file-upload-label" id="gdbFileLabel">
+        <span id="gdbFileName">Choose OnlineGDB CSV or drag here</span>
+      </label>
+    </div>
+    <div>
+      <button type="button" class="btn btn-primary" id="gdbMergeBtn" disabled>
+        Upload &amp; Merge
+      </button>
+    </div>
+    <div id="gdbStatusMessage" style="margin-top:0.75rem;"></div>
+    <div id="gdbAmbiguousPanel" style="display:none;"></div>
+  `;
+
+  document.querySelector(".card").appendChild(section);
+
+  const fileInput   = document.getElementById("gdbFileInput");
+  const fileLabel   = document.getElementById("gdbFileLabel");
+  const fileNameSpan = document.getElementById("gdbFileName");
+  const mergeBtn    = document.getElementById("gdbMergeBtn");
+
+  function setGdbFile(file) {
+    if (file && file.name.toLowerCase().endsWith(".csv")) {
+      // Swap the DataTransfer so fileInput.files reflects the dragged file
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      fileInput.files = dt.files;
+      fileNameSpan.textContent = file.name;
+      fileLabel.classList.add("has-file");
+      mergeBtn.disabled = false;
+    }
+  }
+
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length > 0) {
+      fileNameSpan.textContent = fileInput.files[0].name;
+      fileLabel.classList.add("has-file");
+      mergeBtn.disabled = false;
+    } else {
+      fileNameSpan.textContent = "Choose OnlineGDB CSV or drag here";
+      fileLabel.classList.remove("has-file");
+      mergeBtn.disabled = true;
+    }
+  });
+
+  fileLabel.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    fileLabel.style.borderColor = "var(--accent)";
+  });
+  fileLabel.addEventListener("dragleave", () => {
+    fileLabel.style.borderColor = "";
+  });
+  fileLabel.addEventListener("drop", (e) => {
+    e.preventDefault();
+    fileLabel.style.borderColor = "";
+    const file = e.dataTransfer.files[0];
+    if (file) setGdbFile(file);
+  });
+
+  mergeBtn.addEventListener("click", handleGdbMerge);
+}
+
+async function handleGdbMerge() {
+  const fileInput = document.getElementById("gdbFileInput");
+  const mergeBtn = document.getElementById("gdbMergeBtn");
+  const statusEl = document.getElementById("gdbStatusMessage");
+  const ambiguousPanel = document.getElementById("gdbAmbiguousPanel");
+
+  if (!fileInput.files.length) return;
+
+  mergeBtn.disabled = true;
+  mergeBtn.textContent = "Merging…";
+  statusEl.innerHTML = "";
+  ambiguousPanel.style.display = "none";
+
+  const formData = new FormData();
+  formData.append("file", fileInput.files[0]);
+  formData.append("rows", JSON.stringify(currentResultRows));
+
+  try {
+    const resp = await fetch(`${API_URL}/merge/onlinegdb`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      statusEl.innerHTML = `<span class="msg-error">${data.error || "Merge failed."}</span>`;
+      return;
+    }
+
+    // Update the live result state with merged data
+    currentResultRows = data.rows;
+    currentResultColumns = data.columns;
+
+    // Re-render the table in place with the new column
+    rebuildResultsTable(currentResultColumns, currentResultRows);
+
+    // Summary line
+    const removed = data.test_students_removed;
+    const unmatched = data.unmatched?.length ?? 0;
+    statusEl.innerHTML = `
+      <span class="msg-success">
+        ✓ Matched <strong>${data.matched}</strong> student(s).
+        ${unmatched > 0 ? `<strong>${unmatched}</strong> unmatched (set to 0).` : ""}
+        ${removed > 0 ? `<strong>${removed}</strong> test student(s) removed.` : ""}
+      </span>`;
+
+    if (data.ambiguous && data.ambiguous.length > 0) {
+      renderAmbiguousPanel(data.ambiguous);
+    }
+  } catch (err) {
+    statusEl.innerHTML = `<span class="msg-error">Network error: ${err.message}</span>`;
+  } finally {
+    mergeBtn.disabled = false;
+    mergeBtn.textContent = "Upload & Merge";
+  }
+}
+
+function renderAmbiguousPanel(ambiguousEntries) {
+  const panel = document.getElementById("gdbAmbiguousPanel");
+
+  let rowsHTML = ambiguousEntries.map((entry) => {
+    const opts = entry.candidates.map(
+      (c) => `<option value="${c}">${c}</option>`
+    ).join("");
+    const safeGdbName = entry.gdb_name.replace(/"/g, "&quot;");
+    return `
+      <div class="gdb-ambiguous-row" data-gdb-name="${safeGdbName}" data-gdb-score="${entry.gdb_score}">
+        <span class="gdb-ambiguous-label">
+          <strong>${entry.gdb_name}</strong>
+          <span class="gdb-score-badge">Score: ${entry.gdb_score}</span>
+        </span>
+        <span class="gdb-arrow">→</span>
+        <select class="gdb-candidate-select">
+          <option value="">— select student —</option>
+          ${opts}
+        </select>
+      </div>`;
+  }).join("");
+
+  panel.innerHTML = `
+    <div class="gdb-ambiguous-header">
+      <strong>Manual Resolution Required</strong>
+      <p style="font-size:0.85rem;color:var(--text-secondary);margin:0.3rem 0 0.75rem;">
+        The following OnlineGDB students share a first name with no last name and
+        could not be matched automatically. Select the correct Canvas student for each.
+      </p>
+    </div>
+    ${rowsHTML}
+    <div id="gdbResolveStatus" style="margin-top:0.6rem;"></div>
+    <button type="button" class="btn btn-primary" id="gdbResolveBtn"
+            style="margin-top:0.75rem;">
+      Apply Resolutions
+    </button>
+  `;
+  panel.style.display = "block";
+
+  document.getElementById("gdbResolveBtn").addEventListener("click", handleGdbResolve);
+}
+
+async function handleGdbResolve() {
+  const resolveBtn = document.getElementById("gdbResolveBtn");
+  const resolveStatus = document.getElementById("gdbResolveStatus");
+
+  const resolutions = [];
+  let incomplete = false;
+
+  document.querySelectorAll(".gdb-ambiguous-row").forEach((row) => {
+    const gdbName = row.dataset.gdbName;
+    const gdbScore = row.dataset.gdbScore;
+    const select = row.querySelector(".gdb-candidate-select");
+    const canvasName = select.value;
+
+    if (!canvasName) {
+      incomplete = true;
+    } else {
+      resolutions.push({ canvas_name: canvasName, gdb_score: gdbScore });
+    }
+  });
+
+  if (incomplete) {
+    resolveStatus.innerHTML = `<span class="msg-error">Please select a student for every entry before applying.</span>`;
+    return;
+  }
+
+  resolveBtn.disabled = true;
+  resolveBtn.textContent = "Applying…";
+
+  try {
+    const resp = await fetch(`${API_URL}/merge/onlinegdb/resolve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: currentResultRows, resolutions }),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      resolveStatus.innerHTML = `<span class="msg-error">${data.error || "Resolution failed."}</span>`;
+      return;
+    }
+
+    currentResultRows = data.rows;
+    rebuildResultsTable(currentResultColumns, currentResultRows);
+
+    document.getElementById("gdbAmbiguousPanel").style.display = "none";
+    document.getElementById("gdbStatusMessage").innerHTML +=
+      ` <span class="msg-success">✓ Resolutions applied.</span>`;
+  } catch (err) {
+    resolveStatus.innerHTML = `<span class="msg-error">Network error: ${err.message}</span>`;
+  } finally {
+    resolveBtn.disabled = false;
+    resolveBtn.textContent = "Apply Resolutions";
+  }
+}
+
+function rebuildResultsTable(columns, rows) {
+  const table = document.getElementById("resultsTable");
+  if (!table) return;
+
+  let html = "<thead><tr>";
+  columns.forEach((h) => {
+    html += `<th style="padding:0.75rem;background:var(--bg-secondary);border:1px solid var(--border);text-align:left;">${h}</th>`;
+  });
+  html += "</tr></thead><tbody>";
+
+  rows.forEach((row) => {
+    html += "<tr>";
+    columns.forEach((h) => {
+      const value = row[h] !== undefined && row[h] !== null ? row[h] : "";
+      const isEmpty = value === "";
+      html += `<td style="padding:0.75rem;border:1px solid var(--border);${isEmpty ? "background:var(--warning-bg,#fff8e1);" : ""}">${value}</td>`;
+    });
+    html += "</tr>";
+  });
+  html += "</tbody>";
+  table.innerHTML = html;
 }
 
 function displayDebugResults(debug) {
