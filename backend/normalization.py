@@ -86,6 +86,18 @@ def _extract_points_possible_row(df):
     return df[mask].iloc[0]
 
 
+def _is_extra_credit_column(col_name: str) -> bool:
+    """Return True if a column should be treated as extra credit.
+
+    Extra-credit columns contribute to the numerator (student scores are summed)
+    but must never contribute to the denominator, regardless of whatever value
+    Canvas has placed in their Points Possible row.  Canvas sometimes exports a
+    non-zero Points Possible for extra-credit items, which would incorrectly
+    inflate the denominator and prevent any student from reaching 100%.
+    """
+    return "extra credit" in col_name.lower()
+
+
 def _dynamic_denominator(points_row, columns, default_value):
     """Sum the Points Possible values across the given columns.
 
@@ -93,12 +105,17 @@ def _dynamic_denominator(points_row, columns, default_value):
     for the relevant score bucket. If the row is absent, or the sum works out to
     zero (e.g. all extra-credit columns whose Points Possible is 0), the
     caller-supplied default_value is used instead.
+
+    Extra-credit columns are always excluded from the denominator sum — they
+    add to students' numerator scores without raising the bar for everyone else.
     """
     if points_row is None or not columns:
         return default_value
 
     total = 0.0
     for col in columns:
+        if _is_extra_credit_column(col):
+            continue  # never count extra credit toward the denominator
         if col not in points_row.index:
             continue
         value = pd.to_numeric(points_row[col], errors="coerce")
