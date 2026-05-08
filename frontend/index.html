@@ -16,17 +16,23 @@
     <nav class="navbar">
       <div class="navbar-content">
         <div class="navbar-brand">Grade Normalizer</div>
-        <nav class="navbar-nav">
-          <a href="index.html" class="navbar-link active">App</a>
-          <a href="about.html" class="navbar-link">About</a>
-        </nav>
-        <div class="navbar-right">
+
+        <!-- Collapsible section: hidden on mobile until hamburger is clicked -->
+        <div class="navbar-collapse" id="navbarCollapse">
+          <nav class="navbar-nav">
+            <a href="index.html" class="navbar-link active">App</a>
+            <a href="about.html" class="navbar-link">About</a>
+          </nav>
           <div class="navbar-user" id="navbarUser">
             <span class="navbar-user-label" id="navbarUserLabel"></span>
             <button class="btn-logout" id="logoutBtn" type="button">
               Sign Out
             </button>
           </div>
+        </div>
+
+        <!-- Always visible: theme toggle + hamburger -->
+        <div class="navbar-right">
           <div class="theme-toggle" id="themeToggle">
             <div class="theme-toggle-slider">
               <img
@@ -36,6 +42,16 @@
               />
             </div>
           </div>
+          <button
+            class="navbar-hamburger"
+            id="navbarHamburger"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+          >
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
         </div>
       </div>
     </nav>

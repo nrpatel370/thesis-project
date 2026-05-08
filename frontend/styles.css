@@ -94,11 +94,18 @@ body {
   font-weight: 400;
 }
 
+.navbar-collapse {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+  justify-content: center;
+}
+
 .navbar-nav {
   display: flex;
   align-items: center;
   gap: 0.15rem;
-  flex: 0 1 150px;
 }
 
 .navbar-link {
@@ -160,6 +167,45 @@ body {
 .btn-logout:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* Hamburger menu button — hidden on desktop, shown on mobile */
+.navbar-hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 22px;
+  height: 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.navbar-hamburger span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background: var(--text-primary);
+  border-radius: 2px;
+  transition:
+    transform 0.25s ease,
+    opacity 0.25s ease;
+}
+
+/* Animate to × when menu is open */
+.navbar.is-open .navbar-hamburger span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.navbar.is-open .navbar-hamburger span:nth-child(2) {
+  opacity: 0;
+  transform: scaleX(0);
+}
+
+.navbar.is-open .navbar-hamburger span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
 }
 
 /* Theme Toggle */
@@ -1138,6 +1184,66 @@ body {
 @media (max-width: 768px) {
   .navbar {
     padding: 1rem;
+  }
+
+  /* Show hamburger button */
+  .navbar-hamburger {
+    display: flex;
+  }
+
+  /* Allow the content row to wrap so the collapse can appear beneath */
+  .navbar-content {
+    flex-wrap: wrap;
+    gap: 0;
+  }
+
+  .navbar-brand {
+    order: 1;
+    flex: 1;
+  }
+
+  .navbar-right {
+    order: 2;
+  }
+
+  /* Collapsible nav — hidden by default, shown as column when open */
+  .navbar-collapse {
+    order: 3;
+    width: 100%;
+    display: none;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    padding: 0.75rem 0 0.25rem;
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .navbar.is-open .navbar-collapse {
+    display: flex;
+  }
+
+  /* Nav links take full width on mobile for easier tapping */
+  .navbar-nav {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+
+  .navbar-link {
+    width: 100%;
+    padding: 0.55rem 0.5rem;
+    font-size: 0.9rem;
+  }
+
+  /* User / sign-out section in the mobile menu */
+  .navbar-user {
+    width: 100%;
+    padding-top: 0.5rem;
+    margin-top: 0.25rem;
+    border-top: 1px solid var(--border);
+    justify-content: space-between;
   }
 
   .container {

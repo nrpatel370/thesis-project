@@ -1822,3 +1822,42 @@ function downloadCSV(columns, data, filename) {
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
 }
+
+// ---------------------------------------------------------------------------
+// Hamburger menu (mobile nav)
+// ---------------------------------------------------------------------------
+(function () {
+  const hamburger = document.getElementById("navbarHamburger");
+  const navbar = document.querySelector(".navbar");
+  if (!hamburger || !navbar) return;
+
+  function openMenu() {
+    navbar.classList.add("is-open");
+    hamburger.setAttribute("aria-expanded", "true");
+  }
+
+  function closeMenu() {
+    navbar.classList.remove("is-open");
+    hamburger.setAttribute("aria-expanded", "false");
+  }
+
+  hamburger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    navbar.classList.contains("is-open") ? closeMenu() : openMenu();
+  });
+
+  // Close when clicking outside the navbar
+  document.addEventListener("click", (e) => {
+    if (!navbar.contains(e.target)) closeMenu();
+  });
+
+  // Close on Escape key
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeMenu();
+  });
+
+  // Close automatically when a nav link is clicked (SPA-style navigation feel)
+  navbar.querySelectorAll(".navbar-link").forEach((link) => {
+    link.addEventListener("click", closeMenu);
+  });
+})();

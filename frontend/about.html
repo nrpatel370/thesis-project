@@ -21,10 +21,16 @@
     <nav class="navbar">
       <div class="navbar-content">
         <div class="navbar-brand">Grade Normalizer</div>
-        <nav class="navbar-nav">
-          <a href="index.html" class="navbar-link">App</a>
-          <a href="about.html" class="navbar-link active">About</a>
-        </nav>
+
+        <!-- Collapsible section: hidden on mobile until hamburger is clicked -->
+        <div class="navbar-collapse" id="navbarCollapse">
+          <nav class="navbar-nav">
+            <a href="index.html" class="navbar-link">App</a>
+            <a href="about.html" class="navbar-link active">About</a>
+          </nav>
+        </div>
+
+        <!-- Always visible: theme toggle + hamburger -->
         <div class="navbar-right">
           <div class="theme-toggle" id="themeToggle">
             <div class="theme-toggle-slider">
@@ -35,6 +41,16 @@
               />
             </div>
           </div>
+          <button
+            class="navbar-hamburger"
+            id="navbarHamburger"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+          >
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
         </div>
       </div>
     </nav>
@@ -190,6 +206,36 @@
         localStorage.setItem("theme", next);
         applyTheme(next);
       });
+
+      // Hamburger menu (mobile nav)
+      (function () {
+        const hamburger = document.getElementById("navbarHamburger");
+        const navbar = document.querySelector(".navbar");
+        if (!hamburger || !navbar) return;
+
+        function openMenu() {
+          navbar.classList.add("is-open");
+          hamburger.setAttribute("aria-expanded", "true");
+        }
+        function closeMenu() {
+          navbar.classList.remove("is-open");
+          hamburger.setAttribute("aria-expanded", "false");
+        }
+
+        hamburger.addEventListener("click", (e) => {
+          e.stopPropagation();
+          navbar.classList.contains("is-open") ? closeMenu() : openMenu();
+        });
+        document.addEventListener("click", (e) => {
+          if (!navbar.contains(e.target)) closeMenu();
+        });
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") closeMenu();
+        });
+        navbar.querySelectorAll(".navbar-link").forEach((link) => {
+          link.addEventListener("click", closeMenu);
+        });
+      })();
     </script>
   </body>
 </html>
